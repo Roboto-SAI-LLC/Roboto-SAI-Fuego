@@ -54,6 +54,7 @@ interface ChatState {
   setTheme: (theme: string) => void;
   clearMessages: () => void;
   toggleVoiceMode: () => void;
+}
 
 const generateTitle = (content: string): string => {
   const cleaned = content.replace(/[^\w\s]/g, '').trim();

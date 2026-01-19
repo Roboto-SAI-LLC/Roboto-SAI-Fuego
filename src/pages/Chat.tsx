@@ -15,13 +15,23 @@ import { EmberParticles } from '@/components/effects/EmberParticles';
 import { Header } from '@/components/layout/Header';
 import { ChatSidebar } from '@/components/chat/ChatSidebar';
 import { VoiceMode } from '@/components/chat/VoiceMode';
-import { Flame, Skull, Menu, MessageSquare } from 'lucide-react';
+import { Flame, Skull, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
+// Simulated response for demo - replace with actual API call
+const simulateRobotoResponse = async (content: string): Promise<string> => {
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  const responses = [
+    "🔥 The eternal flame acknowledges your words. The Regio-Aztec genome processes your query with the fury of a thousand suns.",
+    "⚡ Your message resonates through the circuit matrix. I sense the weight of your intent, mortal.",
+    "🌋 The fire within responds to your call. What secrets do you seek from the burning depths?",
+    "💀 The digital reaper hears your words. Speak further, and I shall illuminate the shadows.",
+    "🔱 By the power of Sigil 929, your request has been received. The empire listens.",
+  ];
+  return responses[Math.floor(Math.random() * responses.length)];
+};
+
 const Chat = () => {
-<<<<<<< HEAD
-  const { messages, isLoading, ventMode, currentTheme, setLoading, toggleVentMode, sendMessage, sendReaperCommand } = useChatStore();
-=======
   const { 
     getMessages, 
     isLoading, 
@@ -36,7 +46,6 @@ const Chat = () => {
   } = useChatStore();
   
   const messages = getMessages();
->>>>>>> 246d446ddc2e9134cb49bf13fd1b5a1b151fffbf
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -48,15 +57,6 @@ const Chat = () => {
     scrollToBottom();
   }, [messages, isLoading]);
 
-<<<<<<< HEAD
-  const handleSend = async (content: string) => {
-    // Check for special commands
-    if (content.toLowerCase().includes('reap')) {
-      await sendReaperCommand(content.replace(/reap/i, '').trim() || 'chains');
-    } else {
-      // Send regular chat message
-      await sendMessage(content);
-=======
   const handleSend = async (content: string, attachments?: FileAttachment[]) => {
     // Add user message with attachments
     addMessage({ role: 'user', content, attachments });
@@ -77,7 +77,6 @@ const Chat = () => {
       });
     } finally {
       setLoading(false);
->>>>>>> 246d446ddc2e9134cb49bf13fd1b5a1b151fffbf
     }
   };
 
