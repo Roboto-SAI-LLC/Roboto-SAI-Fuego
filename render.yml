@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: roboto-sai-frontend
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --legacy-peer-deps && npm run build
+    startCommand: npm run preview -- --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: VITE_API_URL
+        value: https://roboto-sai-backend.onrender.com
+    staticPublishPath: dist
+    routes:
+      - path: "/"
+        destination: "/index.html"
+
+  - type: web
+    name: roboto-sai-backend
+    runtime: python
+    pythonVersion: 3.13
+    plan: starter
+    buildCommand: pip install --no-cache-dir -r backend/requirements.txt && pip install --no-cache-dir -e sdk/roboto-sai-sdk
+    startCommand: mkdir -p /var/data && cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: XAI_API_KEY
+        sync: false
+      - key: PYTHON_ENV
+        value: production
+      - key: ROBO_EMOTION_STATE_PATH
+        value: /var/data/emotion_state.json
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:////var/data/roboto.db
+    healthCheckPath: /api/health
+    healthCheckStartupFailureThreshold: 10
+
+  - type: redis
+    name: roboto-sai-redis
+    plan: starter
+    ipAllowList: []
+
+databases:
+  - name: roboto-sai-sqlite
+    databaseName: roboto_sai
+    plan: starter

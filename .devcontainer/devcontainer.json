@@ -1,0 +1,27 @@
+{
+  "name": "Roboto-SAI-2026 Dev",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "roboto-sai-dev",
+  "workspaceFolder": "/app",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:3": {}
+  },
+  "forwardPorts": [8080, 5000],
+  "postCreateCommand": "npm install && cd backend && pip install -r requirements.txt",
+  "remoteUser": "node",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.vscode-typescript-next",
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  }
+}

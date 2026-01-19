@@ -45,10 +45,14 @@ services:
     environment:
       - PYTHON_ENV=production
       - XAI_API_KEY=${XAI_API_KEY}
+      - ROBO_EMOTION_STATE_PATH=/app/backend/data/emotion_state.json
     env_file:
       - .env
-    # volumes:  # DISABLED - conflicts pip install -e SDK (Debug-Reaper fix)
-      # - ./backend:/app/backend  # Re-enable for dev hot-reload after SDK fix
+    volumes:
+      - ./backend:/app/backend:cached
+      - ./BackendAdds:/app/BackendAdds:cached  
+      - ./sdk:/app/sdk:cached
+      - ./backend/data:/app/backend/data
     restart: unless-stopped
     networks:
       - roboto-network
