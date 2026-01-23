@@ -84,6 +84,9 @@
       "trauma trigger": 1.0
     }
   },
-  "emotion_history": [],
+  "emotion_history": [
+    "curious",
+    "curious"
+  ],
   "cultural_weights": {}
 }

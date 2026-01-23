@@ -387,7 +387,7 @@ class EssenceData(BaseModel):
 
 class FeedbackRequest(BaseModel):
     """Message feedback request"""
-    message_id: int
+    message_id: str
     rating: int  # 1=thumbs up, -1=thumbs down
 
 # Voice WebSocket Proxy
@@ -555,7 +555,7 @@ async def chat_with_grok(
 
         # Load conversation history
         history_store = SupabaseMessageHistory(session_id=session_id, user_id=user["id"])
-        history_messages = history_store.messages  # sync property
+        history_messages = await history_store._get_messages_async()
         
         # Prepare user message with emotion
         user_message = HumanMessage(
