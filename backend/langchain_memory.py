@@ -36,37 +36,45 @@ class SupabaseMessageHistory(BaseChatMessageHistory):
         finally:
             loop.close()
 
+    def _build_additional_kwargs(self, msg: Dict[str, Any]) -> Dict[str, Any]:
+        """Build additional_kwargs from message data."""
+        additional_kwargs = {}
+        if msg.get("emotion"):
+            additional_kwargs["emotion"] = msg["emotion"]
+        if msg.get("emotion_text"):
+            additional_kwargs["emotion_text"] = msg["emotion_text"]
+        if msg.get("emotion_probabilities"):
+            try:
+                additional_kwargs["emotion_probabilities"] = json.loads(msg["emotion_probabilities"])
+            except:
+                additional_kwargs["emotion_probabilities"] = msg["emotion_probabilities"]
+        return additional_kwargs
+
+    def _create_lc_message(self, msg: Dict[str, Any]) -> Optional[BaseMessage]:
+        """Create a LangChain message from message data."""
+        content = msg["content"]
+        additional_kwargs = self._build_additional_kwargs(msg)
+        
+        if msg["role"] == "user":
+            return HumanMessage(content=content, additional_kwargs=additional_kwargs)
+        elif msg["role"] == "assistant":
+            return AIMessage(content=content, additional_kwargs=additional_kwargs)
+        return None
+
     async def _get_messages_async(self) -> List[BaseMessage]:
         supabase = get_supabase_client()
         query = supabase.table("messages").select("*").eq("session_id", self.session_id).order("created_at")
         if self.user_id:
             query = query.eq("user_id", self.user_id)
         
-        result = query.execute()
+        result = await asyncio.to_thread(query.execute)
         data = result.data or []
 
         lc_messages = []
         for msg in data:
-            content = msg["content"]
-            additional_kwargs = {}
-            if msg.get("emotion"):
-                additional_kwargs["emotion"] = msg["emotion"]
-            if msg.get("emotion_text"):
-                additional_kwargs["emotion_text"] = msg["emotion_text"]
-            if msg.get("emotion_probabilities"):
-                try:
-                    additional_kwargs["emotion_probabilities"] = json.loads(msg["emotion_probabilities"])
-                except:
-                    additional_kwargs["emotion_probabilities"] = msg["emotion_probabilities"]
-
-            if msg["role"] == "user":
-                lc_message = HumanMessage(content=content, additional_kwargs=additional_kwargs)
-            elif msg["role"] == "assistant":
-                lc_message = AIMessage(content=content, additional_kwargs=additional_kwargs)
-            else:
-                continue
-
-            lc_messages.append(lc_message)
+            lc_message = self._create_lc_message(msg)
+            if lc_message:
+                lc_messages.append(lc_message)
 
         return lc_messages
 
@@ -86,14 +94,14 @@ class SupabaseMessageHistory(BaseChatMessageHistory):
             "emotion_probabilities": json.dumps(message.additional_kwargs.get("emotion_probabilities", {})),
         }
 
-        supabase.table("messages").insert(data).execute()
+        await asyncio.to_thread(lambda: supabase.table("messages").insert(data).execute())
 
     async def clear(self) -> None:
         supabase = get_supabase_client()
         query = supabase.table("messages").delete().eq("session_id", self.session_id)
         if self.user_id:
             query = query.eq("user_id", self.user_id)
-        query.execute()
+        await asyncio.to_thread(query.execute)
 
     def __len__(self) -> int:
         import asyncio
@@ -108,5 +116,5 @@ class SupabaseMessageHistory(BaseChatMessageHistory):
         query = supabase.table("messages").select("count", count="exact").eq("session_id", self.session_id)
         if self.user_id:
             query = query.eq("user_id", self.user_id)
-        result = query.execute()
+        result = await asyncio.to_thread(query.execute)
         return result.count or 0

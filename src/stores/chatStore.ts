@@ -97,11 +97,12 @@ export const useChatStore = create<ChatState>()(
           .flatMap(conv => conv.messages)
           .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
-        const maxMessages = 200;
+        const maxMessages = 50; // Reduced for proxy
         const recent = allMessages.slice(-maxMessages);
-        return recent
-          .map(message => `${message.role}: ${message.content}`)
+        let context = recent
+          .map(message => `${message.role}: ${message.content.substring(0, 500)}`) // Trunc per msg
           .join('\n');
+        return context.length > 10000 ? context.substring(0, 10000) + '\n... (truncated)' : context;
       },
       
       createNewConversation: () => {
