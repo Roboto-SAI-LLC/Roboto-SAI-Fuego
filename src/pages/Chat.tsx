@@ -52,8 +52,6 @@ const Chat = () => {
     toggleVoiceMode,
     getAllConversationsContext,
     loadUserHistory,
-    currentConversationId,
-    createNewConversation,
     userId: storeUserId
   } = useChatStore();
   
@@ -107,13 +105,13 @@ const Chat = () => {
     }
 
     // Add user message with attachments
-    addMessage({ role: 'user', content, attachments });
+    const conversationId = addMessage({ role: 'user', content, attachments });
     setLoading(true);
 
     try {
       // Get context from all conversations for better responses
       const context = getAllConversationsContext();
-      const sessionId = currentConversationId || createNewConversation();
+      const sessionId = conversationId;
       
       const apiBaseUrl = getApiBaseUrl();
       const chatUrl = apiBaseUrl ? `${apiBaseUrl}/api/chat` : '/api/chat';

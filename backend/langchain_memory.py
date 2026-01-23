@@ -17,6 +17,10 @@ from langchain_core.pydantic_v1 import BaseModel
 from db import get_supabase_client
 
 
+# In-memory fallback when Supabase is not configured
+_memory_store: dict[str, list[BaseMessage]] = {}
+
+
 class SupabaseMessageHistory(BaseChatMessageHistory):
     """
     Supabase-based chat message history for LangChain.
@@ -24,7 +28,9 @@ class SupabaseMessageHistory(BaseChatMessageHistory):
 
     def __init__(self, session_id: str, user_id: Optional[str] = None):
         self.session_id = session_id
-        self.user_id = user_id
+        self.user_id = user_id or "demo-user"
+        self._supabase = get_supabase_client()
+        self._key = f"{self.user_id}::{self.session_id}"
 
     @property
     def messages(self) -> List[BaseMessage]:
@@ -62,8 +68,10 @@ class SupabaseMessageHistory(BaseChatMessageHistory):
         return None
 
     async def _get_messages_async(self) -> List[BaseMessage]:
-        supabase = get_supabase_client()
-        query = supabase.table("messages").select("*").eq("session_id", self.session_id).order("created_at")
+        if self._supabase is None:
+            return _memory_store.get(self._key, []).copy()
+
+        query = self._supabase.table("messages").select("*").eq("session_id", self.session_id).order("created_at")
         if self.user_id:
             query = query.eq("user_id", self.user_id)
         
@@ -79,9 +87,12 @@ class SupabaseMessageHistory(BaseChatMessageHistory):
         return lc_messages
 
     async def add_message(self, message: BaseMessage) -> None:
-        supabase = get_supabase_client()
         role = "user" if isinstance(message, HumanMessage) else "assistant" if isinstance(message, AIMessage) else None
         if not role:
+            return
+
+        if self._supabase is None:
+            _memory_store.setdefault(self._key, []).append(message)
             return
 
         data = {
@@ -94,11 +105,14 @@ class SupabaseMessageHistory(BaseChatMessageHistory):
             "emotion_probabilities": json.dumps(message.additional_kwargs.get("emotion_probabilities", {})),
         }
 
-        await asyncio.to_thread(lambda: supabase.table("messages").insert(data).execute())
+        await asyncio.to_thread(lambda: self._supabase.table("messages").insert(data).execute())
 
     async def clear(self) -> None:
-        supabase = get_supabase_client()
-        query = supabase.table("messages").delete().eq("session_id", self.session_id)
+        if self._supabase is None:
+            _memory_store.pop(self._key, None)
+            return
+
+        query = self._supabase.table("messages").delete().eq("session_id", self.session_id)
         if self.user_id:
             query = query.eq("user_id", self.user_id)
         await asyncio.to_thread(query.execute)
@@ -112,8 +126,10 @@ class SupabaseMessageHistory(BaseChatMessageHistory):
             loop.close()
 
     async def _len_async(self) -> int:
-        supabase = get_supabase_client()
-        query = supabase.table("messages").select("count", count="exact").eq("session_id", self.session_id)
+        if self._supabase is None:
+            return len(_memory_store.get(self._key, []))
+
+        query = self._supabase.table("messages").select("count", count="exact").eq("session_id", self.session_id)
         if self.user_id:
             query = query.eq("user_id", self.user_id)
         result = await asyncio.to_thread(query.execute)

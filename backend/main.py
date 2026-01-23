@@ -119,6 +119,7 @@ def _get_frontend_origins() -> list[str]:
         "http://localhost:5173",
         "http://localhost:3000",
         "http://localhost:8080",
+        "http://localhost",
     ]
     # preserve ordering while removing duplicates
     out: list[str] = []
@@ -197,11 +198,20 @@ async def run_supabase_async(func):
 
 async def get_current_user(request: Request) -> Dict[str, Any]:
     """Get current user from auth_sessions cookie."""
+    supabase = get_supabase_client()
+    # Demo fallback when Supabase is not configured
+    if supabase is None:
+        return {
+            "id": "demo-user",
+            "email": "demo@example.com",
+            "display_name": "Demo",
+            "avatar_url": None,
+            "provider": "demo",
+        }
+
     sess_id = request.cookies.get(SESSION_COOKIE_NAME)
     if not sess_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
-
-    supabase = _require_supabase()
     now = _utcnow().isoformat()
     
     # Check session
@@ -629,6 +639,14 @@ async def get_chat_history(
 ) -> Dict[str, Any]:
   """Retrieve recent chat history."""
   supabase = get_supabase_client()
+  if supabase is None:
+    return {
+      "success": True,
+      "count": 0,
+      "messages": [],
+      "timestamp": datetime.now().isoformat(),
+    }
+
   query = supabase.table('messages').select('*').eq('user_id', user['id']).order('created_at', desc=True).limit(limit)
   if session_id:
     query = query.eq('session_id', session_id)

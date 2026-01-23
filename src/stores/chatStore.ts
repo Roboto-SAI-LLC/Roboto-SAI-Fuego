@@ -55,7 +55,7 @@ interface ChatState {
   createNewConversation: () => string;
   selectConversation: (id: string) => void;
   deleteConversation: (id: string) => void;
-  addMessage: (message: Omit<Message, 'id' | 'timestamp'>) => void;
+  addMessage: (message: Omit<Message, 'id' | 'timestamp'>) => string;
   setLoading: (loading: boolean) => void;
   toggleVentMode: () => void;
   setTheme: (theme: string) => void;
@@ -69,6 +69,62 @@ const generateTitle = (content: string): string => {
   const cleaned = content.replace(/[^\w\s]/g, '').trim();
   const words = cleaned.split(/\s+/).slice(0, 5);
   return words.join(' ') || 'New Chat';
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const reviveDate = (value: unknown): Date => {
+  const date = value instanceof Date
+    ? value
+    : (typeof value === 'string' || typeof value === 'number')
+      ? new Date(value)
+      : new Date();
+
+  return Number.isNaN(date.valueOf()) ? new Date() : date;
+};
+
+const reviveMessage = (value: unknown): Message => {
+  if (!isRecord(value)) {
+    return {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: '',
+      timestamp: new Date(),
+    };
+  }
+
+  return {
+    id: typeof value.id === 'string' ? value.id : crypto.randomUUID(),
+    role: value.role === 'assistant' ? 'assistant' : 'user',
+    content: typeof value.content === 'string' ? value.content : '',
+    timestamp: reviveDate(value.timestamp),
+    attachments: Array.isArray(value.attachments) ? (value.attachments as FileAttachment[]) : undefined,
+    emotion: typeof value.emotion === 'string' ? value.emotion : undefined,
+    emotion_text: typeof value.emotion_text === 'string' ? value.emotion_text : undefined,
+    emotion_probabilities: isRecord(value.emotion_probabilities)
+      ? (value.emotion_probabilities as Record<string, number>)
+      : undefined,
+    session_id: typeof value.session_id === 'string' ? value.session_id : undefined,
+    created_at: typeof value.created_at === 'string' ? value.created_at : undefined,
+    user_id: typeof value.user_id === 'string' ? value.user_id : undefined,
+  };
+};
+
+const reviveConversation = (value: unknown): Conversation | null => {
+  if (!isRecord(value)) return null;
+
+  const messages = Array.isArray(value.messages)
+    ? (value.messages as unknown[]).map(reviveMessage)
+    : [];
+
+  return {
+    id: typeof value.id === 'string' ? value.id : crypto.randomUUID(),
+    title: typeof value.title === 'string' ? value.title : 'New Chat',
+    messages,
+    createdAt: reviveDate(value.createdAt),
+    updatedAt: reviveDate(value.updatedAt),
+  };
 };
 
 export const useChatStore = create<ChatState>()(
@@ -141,6 +197,8 @@ export const useChatStore = create<ChatState>()(
       },
       
       addMessage: (message) => {
+        let createdConversationId: string | null = null;
+
         set((state) => {
           let conversationId = state.currentConversationId;
           let conversations = [...state.conversations];
@@ -162,6 +220,7 @@ export const useChatStore = create<ChatState>()(
             ...message,
             id: crypto.randomUUID(),
             timestamp: new Date(),
+            session_id: conversationId,
           };
           
           conversations = conversations.map(conv => {
@@ -182,11 +241,15 @@ export const useChatStore = create<ChatState>()(
             return conv;
           });
           
+          createdConversationId = conversationId;
+
           return {
             conversations,
             currentConversationId: conversationId,
           };
         });
+
+        return createdConversationId ?? crypto.randomUUID();
       },
       
       setLoading: (loading) => set({ isLoading: loading }),
@@ -214,7 +277,8 @@ export const useChatStore = create<ChatState>()(
         try {
           set({ conversations: [], currentConversationId: null, userId });
           const envUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '';
-          const apiBaseUrl = envUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+          const fallbackBase = typeof window !== 'undefined' ? window.location.origin : '';
+          const apiBaseUrl = (envUrl || fallbackBase).replace(/\/+$/, '').replace(/\/api$/, '');
           const url = `${apiBaseUrl}/api/chat/history?limit=200`;
           const res = await fetch(url, { credentials: 'include' });
           if (!res.ok) throw new Error('Failed to load history');
@@ -237,7 +301,13 @@ export const useChatStore = create<ChatState>()(
             const conv = groups.get(sessId)!;
             const createdAt = msg.created_at ? new Date(msg.created_at) : new Date();
             const probabilities = typeof msg.emotion_probabilities === 'string'
-              ? JSON.parse(msg.emotion_probabilities)
+              ? (() => {
+                  try {
+                    return JSON.parse(msg.emotion_probabilities as string);
+                  } catch {
+                    return undefined;
+                  }
+                })()
               : msg.emotion_probabilities;
 
             const storeMsg: Message = {
@@ -288,11 +358,37 @@ export const useChatStore = create<ChatState>()(
       name: 'roboto-sai-chat-storage',
       version: 2,
       migrate: (persistedState: unknown) => {
-        const state = persistedState as ChatState;
-        if (!state.userId) {
-          return state;
+        const envelope = isRecord(persistedState) ? persistedState : null;
+        const rawState = envelope && 'state' in envelope ? (envelope as Record<string, unknown>).state : persistedState;
+
+        const userId = isRecord(rawState) && typeof rawState.userId === 'string' ? rawState.userId : null;
+        const currentTheme = isRecord(rawState) && typeof rawState.currentTheme === 'string'
+          ? rawState.currentTheme
+          : 'Regio-Aztec Fire #42';
+
+        if (!isRecord(rawState) || !userId) {
+          return {
+            conversations: [],
+            currentConversationId: null,
+            currentTheme,
+            userId: null,
+          } as Partial<ChatState>;
         }
-        return state;
+
+        const revivedConversations = Array.isArray(rawState.conversations)
+          ? (rawState.conversations as unknown[])
+              .map(reviveConversation)
+              .filter((c): c is Conversation => c !== null)
+          : [];
+
+        const validCurrentId = revivedConversations.find(c => c.id === rawState.currentConversationId)?.id || null;
+
+        return {
+          conversations: revivedConversations,
+          currentConversationId: validCurrentId,
+          currentTheme,
+          userId,
+        } as Partial<ChatState>;
       },
       partialize: (state) => ({
         conversations: state.conversations,
