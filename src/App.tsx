@@ -31,6 +31,7 @@ const isGitHubPagesHost = () => {
 const Router = HashRouter;
 
 const App = () => {
+  console.log('App loaded');
   const refreshSession = useAuthStore((state) => state.refreshSession);
 
   useEffect(() => {
