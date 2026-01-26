@@ -56,7 +56,8 @@ except ImportError:
 from advanced_emotion_simulator import AdvancedEmotionSimulator
 from grok_llm import GrokLLM
 from memory_system import SupabaseMessageHistory
-from models import get_supabase_client, init_db
+from utils.supabase_client import get_supabase_client
+from db import init_db
 from real_time_data_system import run_supabase_async
 
 # Global client instance
