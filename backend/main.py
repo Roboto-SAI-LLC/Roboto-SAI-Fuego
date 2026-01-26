@@ -248,6 +248,8 @@ def _frontend_url(path: str) -> str:
 
 
 # Configure CORS for frontend
+print("DEBUG: FRONTEND_ORIGIN env =", os.getenv("FRONTEND_ORIGIN"))
+print("DEBUG: allow_origins =", _get_frontend_origins())
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_get_frontend_origins(),
