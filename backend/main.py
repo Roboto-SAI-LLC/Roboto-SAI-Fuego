@@ -73,6 +73,8 @@ async def lifespan(app: FastAPI):
     """Initialize SDK on startup, cleanup on shutdown"""
     global roboto_client, xai_grok
     
+    print("DEBUG: Lifespan startup beginning...")
+    
     logger.info("🚀 Roboto SAI 2026 Backend Starting...")
 
     try:
@@ -130,15 +132,18 @@ async def lifespan(app: FastAPI):
 
 # Initialize FastAPI app
 try:
+    print("DEBUG: Creating FastAPI app...")
     app = FastAPI(
         title="Roboto SAI 2026 API",
         description="🚀 Quantum-Entangled AI Backend for RVM Empire",
         version="0.1.0",
         lifespan=lifespan
     )
-    logger.debug("FastAPI app instance created successfully")
+    print("DEBUG: FastAPI app created successfully")
 except Exception as e:
-    logger.exception(f"App creation failed: {e}")
+    print(f"CRITICAL: FastAPI app creation failed: {e}")
+    import traceback
+    traceback.print_exc()
     raise
 
 @app.on_event("startup")
