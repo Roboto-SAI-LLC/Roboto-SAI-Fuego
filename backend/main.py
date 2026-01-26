@@ -52,6 +52,13 @@ except ImportError:
     RobotoSAIClient = None
     get_xai_grok = None
 
+# Import local modules
+from advanced_emotion_simulator import AdvancedEmotionSimulator
+from grok_llm import GrokLLM
+from memory_system import SupabaseMessageHistory
+from models import get_supabase_client, init_db
+from real_time_data_system import run_supabase_async
+
 # Global client instance
 roboto_client: Optional[Any] = None  # Optional[RobotoSAIClient]
 xai_grok = None
