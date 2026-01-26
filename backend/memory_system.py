@@ -2600,3 +2600,142 @@ class QuantumEnhancedMemorySystem:
                 "total_operations": 0
             }
             self.fractal_patterns = {}
+
+
+# Supabase Message History Integration for LangChain
+try:
+    from langchain_community.chat_message_histories import SupabaseChatMessageHistory
+    from langchain_core.messages import HumanMessage, AIMessage
+    import asyncio
+    from typing import List, Union
+
+    class SupabaseMessageHistory(SupabaseChatMessageHistory):
+        """
+        Custom Supabase message history for Roboto SAI chat integration.
+        Extends langchain's SupabaseChatMessageHistory with async methods.
+        """
+
+        def __init__(self, session_id: str, user_id: str, **kwargs):
+            """Initialize with session_id and user_id for chat history."""
+            # Get Supabase client - assume it's configured globally
+            from utils.supabase_client import get_supabase_client
+            supabase_client = get_supabase_client()
+
+            if supabase_client is None:
+                raise ValueError("Supabase client not configured")
+
+            # Initialize parent class
+            super().__init__(
+                session_id=session_id,
+                client=supabase_client,
+                table_name="messages",  # Use existing messages table
+                **kwargs
+            )
+            self.user_id = user_id
+
+        async def _get_messages_async(self) -> List[Union[HumanMessage, AIMessage]]:
+            """Async method to get messages - converts to LangChain format."""
+            try:
+                # Get messages from Supabase
+                messages_data = await asyncio.to_thread(
+                    lambda: self.client.table(self.table_name)
+                    .select("*")
+                    .eq("session_id", self.session_id)
+                    .eq("user_id", self.user_id)
+                    .order("created_at", desc=False)
+                    .execute()
+                )
+
+                messages = []
+                for msg_data in messages_data.data or []:
+                    content = msg_data.get("content", "")
+                    role = msg_data.get("role", "user")
+
+                    # Extract emotion data if available
+                    emotion_data = {}
+                    if msg_data.get("emotion"):
+                        emotion_data["emotion"] = msg_data["emotion"]
+                    if msg_data.get("emotion_text"):
+                        emotion_data["emotion_text"] = msg_data["emotion_text"]
+                    if msg_data.get("emotion_probabilities"):
+                        try:
+                            emotion_data["emotion_probabilities"] = json.loads(msg_data["emotion_probabilities"])
+                        except:
+                            pass
+
+                    # Create appropriate message type
+                    if role.lower() == "user":
+                        message = HumanMessage(content=content, additional_kwargs=emotion_data)
+                    else:  # assistant
+                        message = AIMessage(content=content, additional_kwargs=emotion_data)
+
+                    messages.append(message)
+
+                return messages
+
+            except Exception as e:
+                logger.error(f"Failed to get messages asynchronously: {e}")
+                return []
+
+        async def add_message(self, message: Union[HumanMessage, AIMessage]) -> str:
+            """Add a message to the history asynchronously."""
+            try:
+                # Determine role
+                if isinstance(message, HumanMessage):
+                    role = "user"
+                else:
+                    role = "assistant"
+
+                # Prepare message data
+                message_data = {
+                    "session_id": self.session_id,
+                    "user_id": self.user_id,
+                    "role": role,
+                    "content": message.content,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+
+                # Add emotion data if available
+                additional_kwargs = getattr(message, 'additional_kwargs', {}) or {}
+                if additional_kwargs.get("emotion"):
+                    message_data["emotion"] = additional_kwargs["emotion"]
+                if additional_kwargs.get("emotion_text"):
+                    message_data["emotion_text"] = additional_kwargs["emotion_text"]
+                if additional_kwargs.get("probabilities"):
+                    message_data["emotion_probabilities"] = json.dumps(additional_kwargs["probabilities"])
+
+                # Insert into Supabase
+                result = await asyncio.to_thread(
+                    lambda: self.client.table(self.table_name)
+                    .insert(message_data)
+                    .execute()
+                )
+
+                # Return the inserted message ID
+                if result.data and len(result.data) > 0:
+                    return result.data[0]["id"]
+                else:
+                    # Fallback ID generation
+                    return f"{self.session_id}_{role}_{datetime.now(timezone.utc).timestamp()}"
+
+            except Exception as e:
+                logger.error(f"Failed to add message asynchronously: {e}")
+                # Return fallback ID
+                return f"{self.session_id}_{role}_{datetime.now(timezone.utc).timestamp()}"
+
+except ImportError as e:
+    logger.warning(f"Supabase message history not available: {e}")
+
+    # Fallback dummy class if langchain-community is not available
+    class SupabaseMessageHistory:
+        """Fallback dummy class when langchain is not available."""
+        def __init__(self, session_id: str, user_id: str, **kwargs):
+            self.session_id = session_id
+            self.user_id = user_id
+            logger.warning("Using fallback SupabaseMessageHistory - no persistent storage")
+
+        async def _get_messages_async(self):
+            return []
+
+        async def add_message(self, message):
+            return f"dummy_{self.session_id}_{datetime.now(timezone.utc).timestamp()}"
