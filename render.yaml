@@ -22,7 +22,7 @@ services:
       - key: XAI_API_KEY
         sync: false
       - key: FRONTEND_ORIGIN
-        sync: false
+        value: https://roboto-sai-fuego.onrender.com
       - key: FRONTEND_HASH_ROUTER
         value: "true"
       - key: SUPABASE_URL
