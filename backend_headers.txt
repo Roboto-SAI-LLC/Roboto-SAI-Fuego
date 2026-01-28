@@ -1,0 +1,60 @@
+* Host roboto-sai-backend.onrender.com:443 was resolved.
+* IPv6: (none)
+* IPv4: 216.24.57.7, 216.24.57.251
+*   Trying 216.24.57.7:443...
+* schannel: disabled automatic use of client certificate
+* ALPN: curl offers http/1.1
+* ALPN: server accepted http/1.1
+* Established connection to roboto-sai-backend.onrender.com (216.24.57.7 port 443) from 192.168.1.195 port 60904 
+* using HTTP/1.x
+> GET /api/health HTTP/1.1
+
+> Host: roboto-sai-backend.onrender.com
+
+> User-Agent: curl/8.16.0
+
+> Accept: */*
+
+> 
+
+* Request completely sent off
+* schannel: remote party requests renegotiation
+* schannel: renegotiating SSL/TLS connection
+* schannel: SSL/TLS connection renegotiated
+< HTTP/1.1 200 OK
+
+< Date: Wed, 28 Jan 2026 14:28:59 GMT
+
+< Content-Type: text/html
+
+< Transfer-Encoding: chunked
+
+< Connection: keep-alive
+
+< CF-RAY: 9c512df07b9420b0-IAH
+
+< etag: W/"697a1bb9-58f"
+
+< last-modified: Wed, 28 Jan 2026 14:22:49 GMT
+
+< rndr-id: 0f253f95-6498-4416
+
+< vary: Accept-Encoding
+
+< x-content-type-options: nosniff
+
+< x-frame-options: SAMEORIGIN
+
+< x-render-origin-server: nginx/1.29.4
+
+< x-xss-protection: 1; mode=block
+
+< cf-cache-status: DYNAMIC
+
+< Server: cloudflare
+
+< alt-svc: h3=":443"; ma=86400
+
+< 
+
+* Connection #0 to host roboto-sai-backend.onrender.com:443 left intact

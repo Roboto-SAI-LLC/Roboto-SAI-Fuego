@@ -1,0 +1,10 @@
+{
+    "serviceDetails": {
+        "openPorts": [
+            {
+                "port": 5000,
+                "protocol": "TCP"
+            }
+        ]
+    }
+}

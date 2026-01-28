@@ -52,6 +52,17 @@ AI-Memory/*
 .env.backup
 .env.local
 .env.*.local
+# Virtual environments
+.venv/
+venv/
+venv*/
+venv_linux/
+
+# Backend env vars (do NOT commit real values)
+backend_env_vars.json
+!backend_env_vars.example.json
+backend_env_vars.*.secret.json
+backend_env_vars.*.local.json
 
 # Roboto AI API keys
 .Roboto

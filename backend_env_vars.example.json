@@ -1,0 +1,34 @@
+[
+  {
+    "key": "XAI_API_KEY",
+    "value": "your_xai_api_key_here"
+  },
+  {
+    "key": "FRONTEND_ORIGIN",
+    "value": "https://your-frontend.example.com"
+  },
+  {
+    "key": "FRONTEND_HASH_ROUTER",
+    "value": "true"
+  },
+  {
+    "key": "SUPABASE_URL",
+    "value": "https://your-supabase-url.supabase.co"
+  },
+  {
+    "key": "SUPABASE_ANON_KEY",
+    "value": "your_supabase_anon_key_here"
+  },
+  {
+    "key": "SUPABASE_SERVICE_ROLE_KEY",
+    "value": "your_supabase_service_role_key_here"
+  },
+  {
+    "key": "SESSION_TTL_SECONDS",
+    "value": "2592000"
+  },
+  {
+    "key": "PYTHON_ENV",
+    "value": "development"
+  }
+]
