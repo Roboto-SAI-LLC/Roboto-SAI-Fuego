@@ -579,8 +579,18 @@ class FeedbackRequest(BaseModel):
     message_id: str
     rating: int  # 1=thumbs up, -1=thumbs down
 
+<<<<<<< HEAD
+<<<<<<< HEAD
 # Voice WebSocket Proxy
 @app.websocket("/api/voice")
+=======
+# Voice WebSocket Proxy
+@app.websocket("/api/voice")
+>>>>>>> b0592201ea6217b6f78ca32d1b9cec10c69321f8
+=======
+# Voice WebSocket Proxy
+@app.websocket("/api/voice")
+>>>>>>> b0592201ea6217b6f78ca32d1b9cec10c69321f8
 async def voice_proxy(websocket: WebSocket) -> None:
     """Proxy WebSocket for Grok Voice Agent API (server-side auth)."""
     await websocket.accept()
