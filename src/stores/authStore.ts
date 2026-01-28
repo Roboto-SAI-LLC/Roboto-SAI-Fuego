@@ -67,8 +67,7 @@ const getApiBaseUrl = (): string => {
   
   // For local development
   if (globalThis.window?.location.hostname === 'localhost' || globalThis.window?.location.hostname === '127.0.0.1') {
-    // Default to port 5000 (FastAPI standard/Docker) if not specified
-    return 'http://localhost:5000';
+    return 'http://localhost:8000';
   }
   
   return '';
@@ -139,27 +138,9 @@ export const useAuthStore = create<AuthState>()(
           credentials: 'include',
           body: JSON.stringify({ email, password }),
         });
-        
         if (!res.ok) {
           const txt = await res.text().catch(() => '');
           throw new Error(txt || 'Registration failed');
-        }
-
-        try {
-          // Immediately update state on successful registration
-          const data = await res.json();
-          if (data.user && data.success) {
-             set({
-              userId: data.user.id,
-              username: data.user.display_name || data.user.email?.split('@')[0] || null,
-              email: data.user.email || null,
-              avatarUrl: null, // Register usually doesn't return avatar
-              provider: data.user.provider || null,
-              isLoggedIn: true,
-            });
-          }
-        } catch (e) {
-          console.error("Failed to parse registration response", e);
         }
       },
 
@@ -172,27 +153,9 @@ export const useAuthStore = create<AuthState>()(
           credentials: 'include',
           body: JSON.stringify({ email, password }),
         });
-        
         if (!res.ok) {
           const txt = await res.text().catch(() => '');
           throw new Error(txt || 'Login failed');
-        }
-
-        try {
-          // Immediately update state on successful login
-          const data = await res.json();
-          if (data.user && data.success) {
-            set({
-              userId: data.user.id,
-              username: data.user.display_name || data.user.email?.split('@')[0] || null,
-              email: data.user.email || null,
-              avatarUrl: null, 
-              provider: data.user.provider || null,
-              isLoggedIn: true,
-            });
-          }
-        } catch (e) {
-          console.error("Failed to parse login response", e);
         }
       },
 

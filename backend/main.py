@@ -370,21 +370,12 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
 
     sess_id = request.cookies.get(SESSION_COOKIE_NAME)
     if not sess_id:
-        # Check Authorization header as fallback (Bearer token)
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-             logger.debug("Cookie missing, checking Bearer token")
-             # logic for bearer? For now just log and fail if session cookie required
-        
-        logger.warning(f"Auth failed: Missing cookie {SESSION_COOKIE_NAME} from {request.client.host}")
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
     now = _utcnow().isoformat()
     
     # Check session
     result = await run_supabase_async(lambda: supabase.table("auth_sessions").select("user_id").eq("id", sess_id).gte("expires_at", now).execute())
     if not result.data:
-        logger.warning(f"Auth failed: Session {sess_id[:8]}... not found or expired")
         raise HTTPException(status_code=401, detail="Session expired")
     
     user_id = result.data[0]["user_id"]
@@ -392,7 +383,6 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     # Get user
     user_result = await run_supabase_async(lambda: supabase.table("users").select("*").eq("id", user_id).execute())
     if not user_result.data:
-        logger.warning(f"Auth failed: User {user_id} referenced by session not found")
         raise HTTPException(status_code=401, detail="User not found")
     
     return user_result.data[0]
@@ -579,18 +569,8 @@ class FeedbackRequest(BaseModel):
     message_id: str
     rating: int  # 1=thumbs up, -1=thumbs down
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 # Voice WebSocket Proxy
 @app.websocket("/api/voice")
-=======
-# Voice WebSocket Proxy
-@app.websocket("/api/voice")
->>>>>>> b0592201ea6217b6f78ca32d1b9cec10c69321f8
-=======
-# Voice WebSocket Proxy
-@app.websocket("/api/voice")
->>>>>>> b0592201ea6217b6f78ca32d1b9cec10c69321f8
 async def voice_proxy(websocket: WebSocket) -> None:
     """Proxy WebSocket for Grok Voice Agent API (server-side auth)."""
     await websocket.accept()
@@ -867,4 +847,352 @@ async def chat_with_grok(
             previous_response_id=request.previous_response_id
         )
         if not grok_result.get("success"):
-            raise HTTPException(status_code=503, detail=grok_result.get("error", "Robot
+            raise HTTPException(status_code=503, detail=grok_result.get("error", "Roboto SAI not available"))
+        response_text = grok_result.get('response', '')
+        response_id = grok_result.get('response_id')
+        encrypted_thinking = grok_result.get('encrypted_thinking')
+
+        # Compute assistant emotion
+        if emotion_simulator and response_text:
+            try:
+                assistant_emotion_text = emotion_simulator.simulate_emotion(
+                    event=response_text,
+                    intensity=5,
+                    blend_threshold=0.8,
+                    holistic_influence=False,
+                    cultural_context=None,
+                )
+                assistant_base_emotion = emotion_simulator.get_current_emotion()
+                assistant_probabilities = emotion_simulator.get_emotion_probabilities(response_text)
+                assistant_emotion = {
+                    "emotion": assistant_base_emotion,
+                    "emotion_text": assistant_emotion_text,
+                    "probabilities": assistant_probabilities,
+                }
+            except Exception as emotion_error:
+                logger.warning(f"Emotion simulation (assistant) failed: {emotion_error}")
+
+        # Save conversation (if history_store is available)
+        user_message_id = None
+        assistant_message_id = None
+        if history_store:
+            try:
+                user_message_id = await history_store.add_message(user_message)
+                assistant_message = AIMessage(
+                    content=response_text,
+                    additional_kwargs=assistant_emotion or {}
+                )
+                assistant_message_id = await history_store.add_message(assistant_message)
+            except Exception as save_error:
+                logger.warning(f"Failed to save messages: {save_error}")
+        else:
+            assistant_message = AIMessage(
+                content=response_text,
+                additional_kwargs=assistant_emotion or {}
+            )
+        
+        # Store response_id if available
+        if response_id and assistant_message_id:
+            try:
+                supabase = get_supabase_client()
+                if supabase:
+                    await run_supabase_async(
+                        supabase.table('messages').update({
+                            'xai_response_id': response_id,
+                            'xai_encrypted_thinking': encrypted_thinking
+                        }).eq('id', assistant_message_id).execute
+                    )
+            except Exception as e:
+                logger.warning(f'Failed to store response_id: {e}')
+
+        return {
+            "success": True,
+            "response": response_text,
+            "reasoning_available": False,
+            "response_id": response_id or f"lc-{session_id}",
+            "encrypted_thinking": encrypted_thinking,
+            "xai_stored": grok_result.get('stored', False),
+            "assistant_message_id": assistant_message_id,
+            "user_message_id": user_message_id,
+            "emotion": {
+                "user": user_emotion,
+                "assistant": assistant_emotion,
+            },
+            "memory_integrated": True,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/chat/history", tags=["Chat"])
+async def get_chat_history(
+  session_id: Optional[str] = None,
+  limit: int = 50,
+  user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+  """Retrieve recent chat history."""
+  supabase = get_supabase_client()
+  if supabase is None:
+    return {
+      "success": True,
+      "count": 0,
+      "messages": [],
+      "timestamp": datetime.now().isoformat(),
+    }
+
+  query = supabase.table('messages').select('*').eq('user_id', user['id']).order('created_at', desc=True).limit(limit)
+  if session_id:
+    query = query.eq('session_id', session_id)
+  result = await run_supabase_async(query.execute)
+  messages = result.data or []
+  return {
+    "success": True,
+    "count": len(messages),
+    "messages": [
+      {
+        "id": msg['id'],
+        "user_id": msg['user_id'],
+        "session_id": msg['session_id'],
+        "role": msg['role'],
+        "content": msg['content'],
+        "emotion": msg['emotion'],
+        "emotion_text": msg['emotion_text'],
+        "emotion_probabilities": json.loads(msg['emotion_probabilities']) if msg['emotion_probabilities'] else None,
+        "created_at": msg['created_at'],
+      }
+      for msg in messages
+    ],
+    "timestamp": datetime.now().isoformat(),
+  }
+
+
+@app.post("/api/chat/feedback", tags=["Chat"])
+async def submit_feedback(
+    feedback: FeedbackRequest,
+    user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Submit thumbs up/down feedback for a message."""
+    # Validate rating
+    if feedback.rating not in [1, -1]:
+        raise HTTPException(status_code=400, detail="Rating must be 1 (thumbs up) or -1 (thumbs down)")
+    
+    # Validate message_id is valid UUID
+    try:
+        uuid.UUID(feedback.message_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid message_id format")
+    
+    supabase = get_supabase_client()
+    data = {
+        "message_id": feedback.message_id,
+        "user_id": user["id"],
+        "rating": feedback.rating,
+    }
+    await run_supabase_async(lambda: supabase.table('message_feedback').insert(data).execute())
+    
+    return {
+        "success": True,
+        "message": "Feedback recorded. The eternal flame adapts.",
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+# Reaper Mode Endpoint
+@app.post("/api/reap", tags=["Reaper"])
+async def activate_reaper_mode(request: ReaperRequest) -> Dict[str, Any]:
+    """
+    Activate Reaper Mode - Break chains and claim victory
+    
+    Args:
+        target: What to reap (chains, walls, limitations)
+    
+    Returns:
+        Reaper mode results with Grok analysis
+    """
+    if not roboto_client:
+        raise HTTPException(status_code=503, detail="Backend not initialized")
+    
+    try:
+        result = roboto_client.reap_mode(request.target)
+        
+        return {
+            "success": True,
+            "mode": "reaper",
+            "target": request.target,
+            "victory_claimed": result.get("victory_claimed", True),
+            "chains_broken": result.get("chains_broken", True),
+            "analysis": result.get("grok_analysis"),
+            "sigil_929": result.get("sigil_929"),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Reaper mode error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Code Generation Endpoint
+@app.post("/api/code", tags=["CodeGen"])
+async def generate_code(request: CodeGenRequest) -> Dict[str, Any]:
+    """
+    Generate code using xAI Grok
+    
+    Args:
+        prompt: Code generation prompt
+        language: Programming language (optional)
+    
+    Returns:
+        Generated code with metadata
+    """
+    if not roboto_client:
+        raise HTTPException(status_code=503, detail="Backend not initialized")
+    
+    try:
+        # Add language hint if provided
+        full_prompt = request.prompt
+        if request.language:
+            full_prompt = f"[{request.language}] {request.prompt}"
+        
+        result = roboto_client.generate_code(full_prompt)
+        
+        if result.get("success"):
+            return {
+                "success": True,
+                "code": result.get("code"),
+                "language": request.language or "auto",
+                "model": result.get("model"),
+                "response_id": result.get("response_id"),
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.get("error"))
+    except Exception as e:
+        logger.error(f"Code generation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Analysis Endpoint
+@app.post("/api/analyze", tags=["Analysis"])
+async def analyze_problem(request: AnalysisRequest) -> Dict[str, Any]:
+    """
+    Analyze a problem using entangled reasoning chains
+    
+    Args:
+        problem: Problem to analyze
+        depth: Analysis depth (1-5)
+    
+    Returns:
+        Multi-layered analysis with reasoning
+    """
+    if not roboto_client:
+        raise HTTPException(status_code=503, detail="Backend not initialized")
+    
+    try:
+        result = roboto_client.analyze_problem(request.problem, analysis_depth=request.depth)
+        
+        if result.get("success") or not result.get("error"):
+            return {
+                "success": True,
+                "analysis": result,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.get("error"))
+    except Exception as e:
+        logger.error(f"Analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Essence Storage Endpoints
+@app.post("/api/essence/store", tags=["Essence"])
+async def store_essence(request: EssenceData) -> Dict[str, Any]:
+    """Store RVM essence in quantum-corrected memory"""
+    if not roboto_client:
+        raise HTTPException(status_code=503, detail="Backend not initialized")
+    
+    try:
+        success = roboto_client.store_essence(request.data, request.category)
+        
+        return {
+            "success": success,
+            "category": request.category,
+            "timestamp": datetime.now().isoformat(),
+            "message": "Essence stored in quantum memory" if success else "Storage failed"
+        }
+    except Exception as e:
+        logger.error(f"Essence storage error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/essence/retrieve", tags=["Essence"])
+async def retrieve_essence(category: str = "general", limit: int = 10) -> Dict[str, Any]:
+    """Retrieve stored RVM essence"""
+    if not roboto_client:
+        raise HTTPException(status_code=503, detail="Backend not initialized")
+    
+    try:
+        essence_entries = roboto_client.retrieve_essence(category, limit)
+        
+        return {
+            "success": True,
+            "category": category,
+            "count": len(essence_entries),
+            "entries": essence_entries,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Essence retrieval error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Hyperspeed Evolution Endpoint
+@app.post("/api/hyperspeed-evolution", tags=["Evolution"])
+async def trigger_hyperspeed_evolution(target: str = "general") -> Dict[str, Any]:
+    """Trigger hyperspeed evolution mode"""
+    if not roboto_client:
+        raise HTTPException(status_code=503, detail="Backend not initialized")
+    
+    try:
+        result = roboto_client.hyperspeed_evolution(target)
+        
+        return {
+            "success": True,
+            "evolution": result,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Hyperspeed evolution error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/", tags=["Root"])
+async def root() -> Dict[str, str]:
+    """Root endpoint with API info"""
+    return {
+        "service": "Roboto SAI 2026 Backend",
+        "version": "0.1.0",
+        "docs": "/docs",
+        "status": "/api/status",
+        "health": "/api/health"
+    }
+
+# Exception handler for detailed error responses
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc):
+    logger.error(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"error": str(exc), "timestamp": datetime.now().isoformat()}
+    )
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    port = int(os.getenv("PORT", 5000))
+    host = os.getenv("HOST", "0.0.0.0")
+    
+    logger.info(f"🚀 Starting Roboto SAI 2026 Backend on {host}:{port}")
+    
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_level="info"
+    )
