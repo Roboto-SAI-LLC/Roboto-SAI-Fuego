@@ -136,12 +136,22 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Roboto SAI 2026 Backend Starting...")
 
     try:
-        init_db()
+        # Initialize database (graceful fallback if Supabase unavailable)
+        try:
+            init_db()
+            logger.info("✅ Database initialized")
+        except Exception as e:
+            logger.warning(f"⚠️ Database initialization failed (running in demo mode): {e}")
 
+        # Initialize emotion simulator
         state_path = os.getenv("ROBO_EMOTION_STATE_PATH", "./data/emotion_state.json")
         emotion_simulator_instance = AdvancedEmotionSimulator()
-        if os.path.exists(state_path):
-            emotion_simulator_instance.load_state(state_path)
+        try:
+            if os.path.exists(state_path):
+                emotion_simulator_instance.load_state(state_path)
+                logger.info("✅ Emotion state loaded")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not load emotion state: {e}")
 
         global emotion_simulator
         emotion_simulator = emotion_simulator_instance
@@ -172,12 +182,20 @@ async def lifespan(app: FastAPI):
         else:
             logger.warning("⚠️ SDK not available - xAI Grok not initialized")
         
-        # Initialize LangChain GrokLLM
+        # Initialize LangChain GrokLLM (graceful fallback)
         global grok_llm
-        grok_llm = GrokLLM()
-        logger.info("✅ LangChain GrokLLM initialized")
+        try:
+            grok_llm = GrokLLM()
+            logger.info("✅ LangChain GrokLLM initialized")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not initialize GrokLLM: {e}")
+            grok_llm = None
+            
+        logger.info("🚀 Backend initialization complete (may be in degraded mode)")
     except Exception as e:
-        logger.error(f"🚨 Backend initialization failed: {e}")
+        logger.error(f"🚨 Unexpected backend initialization error: {e}")
+        # Still allow the app to start
+        logger.info("Starting app in minimal mode...")
         raise
     
     yield
