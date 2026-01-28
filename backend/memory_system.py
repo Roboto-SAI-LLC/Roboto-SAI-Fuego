@@ -16,7 +16,13 @@ import hashlib
 import logging
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
-from textblob import TextBlob
+# Optional textblob import for sentiment analysis
+try:
+    from textblob import TextBlob
+    TEXTBLOB_AVAILABLE = True
+except ImportError:
+    TEXTBLOB_AVAILABLE = False
+    logger.warning("TextBlob not available - sentiment analysis will use basic fallback")
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -2074,17 +2080,33 @@ class QuantumEnhancedMemorySystem:
         try:
             if not text or not isinstance(text, str):
                 return "neutral"
-                
-            blob = TextBlob(str(text))
-            sentiment = blob.sentiment
-            polarity = float(sentiment.polarity)
             
-            if polarity > 0.1:
-                return "positive"
-            elif polarity < -0.1:
-                return "negative"
+            if TEXTBLOB_AVAILABLE:
+                blob = TextBlob(str(text))
+                sentiment = blob.sentiment
+                polarity = float(sentiment.polarity)
+                
+                if polarity > 0.1:
+                    return "positive"
+                elif polarity < -0.1:
+                    return "negative"
+                else:
+                    return "neutral"
             else:
-                return "neutral"
+                # Fallback sentiment analysis without TextBlob
+                text_lower = str(text).lower()
+                positive_words = ['good', 'great', 'excellent', 'amazing', 'wonderful', 'fantastic', 'love', 'happy', 'joy', 'excited']
+                negative_words = ['bad', 'terrible', 'awful', 'hate', 'sad', 'angry', 'frustrated', 'disappointed', 'worried', 'fear']
+                
+                pos_count = sum(1 for word in positive_words if word in text_lower)
+                neg_count = sum(1 for word in negative_words if word in text_lower)
+                
+                if pos_count > neg_count:
+                    return "positive"
+                elif neg_count > pos_count:
+                    return "negative"
+                else:
+                    return "neutral"
         except Exception:
             # Enhanced fallback sentiment analysis
             try:
@@ -2189,11 +2211,19 @@ class QuantumEnhancedMemorySystem:
             if not text or not isinstance(text, str):
                 return []
             
-            blob = TextBlob(text)
-            # Extract noun phrases as themes
-            noun_phrases = list(blob.noun_phrases)
-            themes = [phrase.lower().strip() for phrase in noun_phrases if len(phrase.split()) <= 3 and phrase.strip()]
-            return list(set(themes))[:5]  # Top 5 unique themes
+            if TEXTBLOB_AVAILABLE:
+                blob = TextBlob(text)
+                # Extract noun phrases as themes
+                noun_phrases = list(blob.noun_phrases)
+                themes = [phrase.lower().strip() for phrase in noun_phrases if len(phrase.split()) <= 3 and phrase.strip()]
+                return list(set(themes))[:5]  # Top 5 unique themes
+            else:
+                # Fallback: extract simple keywords
+                words = text.lower().split()
+                # Filter for meaningful words (longer than 3 chars, not common words)
+                stop_words = {'the', 'and', 'but', 'for', 'are', 'this', 'that', 'with', 'have', 'will', 'you', 'not', 'can', 'all', 'from', 'they', 'been', 'said', 'her', 'she', 'him', 'his'}
+                themes = [word.strip() for word in words if len(word) > 3 and word not in stop_words and word.strip()]
+                return list(set(themes))[:5]
         except Exception:
             # Fallback: extract simple keywords
             try:
@@ -2246,12 +2276,44 @@ class QuantumEnhancedMemorySystem:
         try:
             if not text or not isinstance(text, str):
                 return 0.5
+            
+            if TEXTBLOB_AVAILABLE:
+                blob = TextBlob(str(text))
+                sentiment = blob.sentiment
+                polarity = abs(float(sentiment.polarity))
+                subjectivity = float(sentiment.subjectivity)
+                return min(1.0, polarity + subjectivity)
+            else:
+                # Enhanced fallback intensity calculation without TextBlob
+                text_lower = str(text).lower()
+                # Emotional intensity indicators
+                high_intensity_words = ['extremely', 'absolutely', 'completely', 'totally', 'devastated', 'ecstatic', 'furious', 'terrified']
+                medium_intensity_words = ['very', 'really', 'quite', 'pretty', 'fairly', 'rather', 'upset', 'excited', 'worried', 'happy']
+                emotional_punctuation = ['!', '!!', '!!!', '?!', '...']
                 
-            blob = TextBlob(str(text))
-            sentiment = blob.sentiment
-            polarity = abs(float(sentiment.polarity))
-            subjectivity = float(sentiment.subjectivity)
-            return min(1.0, polarity + subjectivity)
+                intensity = 0.5  # baseline
+                
+                # Check for high intensity words
+                for word in high_intensity_words:
+                    if word in text_lower:
+                        intensity += 0.2
+                        
+                # Check for medium intensity words
+                for word in medium_intensity_words:
+                    if word in text_lower:
+                        intensity += 0.1
+                        
+                # Check for emotional punctuation
+                for punct in emotional_punctuation:
+                    if punct in text:
+                        intensity += 0.1
+                        
+                # Check for caps (indicates strong emotion)
+                caps_ratio = sum(1 for c in text if c.isupper()) / max(1, len(text))
+                if caps_ratio > 0.3:
+                    intensity += 0.2
+                    
+                return min(1.0, intensity)
         except Exception:
             # Enhanced fallback intensity calculation
             try:
@@ -2358,23 +2420,37 @@ class QuantumEnhancedMemorySystem:
     
     def _extract_insights(self, reflection_text):
         """Extract actionable insights from reflection"""
-        blob = TextBlob(reflection_text)
-        # Simple keyword-based insight extraction
-        insight_keywords = ["should", "need to", "better", "improve", "learn", "understand"]
-        insights = []
-        
         try:
-            for sentence in blob.sentences:
-                if any(keyword in sentence.string.lower() for keyword in insight_keywords):
-                    insights.append(sentence.string.strip())
+            if TEXTBLOB_AVAILABLE:
+                blob = TextBlob(reflection_text)
+                # Simple keyword-based insight extraction
+                insight_keywords = ["should", "need to", "better", "improve", "learn", "understand"]
+                insights = []
+                
+                try:
+                    for sentence in blob.sentences:
+                        if any(keyword in sentence.string.lower() for keyword in insight_keywords):
+                            insights.append(sentence.string.strip())
+                except Exception:
+                    # Fallback: simple sentence splitting
+                    sentences = reflection_text.split('.')
+                    for sentence in sentences:
+                        if any(keyword in sentence.lower() for keyword in insight_keywords):
+                            insights.append(sentence.strip())
+            else:
+                # Fallback: simple sentence splitting without TextBlob
+                insight_keywords = ["should", "need to", "better", "improve", "learn", "understand"]
+                insights = []
+                
+                sentences = reflection_text.split('.')
+                for sentence in sentences:
+                    if any(keyword in sentence.lower() for keyword in insight_keywords):
+                        insights.append(sentence.strip())
+            
+            return insights[:3]  # Top 3 insights
         except Exception:
-            # Fallback: simple sentence splitting
-            sentences = reflection_text.split('.')
-            for sentence in sentences:
-                if any(keyword in sentence.lower() for keyword in insight_keywords):
-                    insights.append(sentence.strip())
-        
-        return insights[:3]  # Top 3 insights
+            # Ultimate fallback
+            return []
     
     def _categorize_learning(self, reflection_text):
         """Categorize the type of learning from reflection"""
@@ -2600,3 +2676,142 @@ class QuantumEnhancedMemorySystem:
                 "total_operations": 0
             }
             self.fractal_patterns = {}
+
+
+# Supabase Message History Integration for LangChain
+try:
+    from langchain_community.chat_message_histories import SupabaseChatMessageHistory
+    from langchain_core.messages import HumanMessage, AIMessage
+    import asyncio
+    from typing import List, Union
+
+    class SupabaseMessageHistory(SupabaseChatMessageHistory):
+        """
+        Custom Supabase message history for Roboto SAI chat integration.
+        Extends langchain's SupabaseChatMessageHistory with async methods.
+        """
+
+        def __init__(self, session_id: str, user_id: str, **kwargs):
+            """Initialize with session_id and user_id for chat history."""
+            # Get Supabase client - assume it's configured globally
+            from utils.supabase_client import get_supabase_client
+            supabase_client = get_supabase_client()
+
+            if supabase_client is None:
+                raise ValueError("Supabase client not configured")
+
+            # Initialize parent class
+            super().__init__(
+                session_id=session_id,
+                client=supabase_client,
+                table_name="messages",  # Use existing messages table
+                **kwargs
+            )
+            self.user_id = user_id
+
+        async def _get_messages_async(self) -> List[Union[HumanMessage, AIMessage]]:
+            """Async method to get messages - converts to LangChain format."""
+            try:
+                # Get messages from Supabase
+                messages_data = await asyncio.to_thread(
+                    lambda: self.client.table(self.table_name)
+                    .select("*")
+                    .eq("session_id", self.session_id)
+                    .eq("user_id", self.user_id)
+                    .order("created_at", desc=False)
+                    .execute()
+                )
+
+                messages = []
+                for msg_data in messages_data.data or []:
+                    content = msg_data.get("content", "")
+                    role = msg_data.get("role", "user")
+
+                    # Extract emotion data if available
+                    emotion_data = {}
+                    if msg_data.get("emotion"):
+                        emotion_data["emotion"] = msg_data["emotion"]
+                    if msg_data.get("emotion_text"):
+                        emotion_data["emotion_text"] = msg_data["emotion_text"]
+                    if msg_data.get("emotion_probabilities"):
+                        try:
+                            emotion_data["emotion_probabilities"] = json.loads(msg_data["emotion_probabilities"])
+                        except:
+                            pass
+
+                    # Create appropriate message type
+                    if role.lower() == "user":
+                        message = HumanMessage(content=content, additional_kwargs=emotion_data)
+                    else:  # assistant
+                        message = AIMessage(content=content, additional_kwargs=emotion_data)
+
+                    messages.append(message)
+
+                return messages
+
+            except Exception as e:
+                logger.error(f"Failed to get messages asynchronously: {e}")
+                return []
+
+        async def add_message(self, message: Union[HumanMessage, AIMessage]) -> str:
+            """Add a message to the history asynchronously."""
+            try:
+                # Determine role
+                if isinstance(message, HumanMessage):
+                    role = "user"
+                else:
+                    role = "assistant"
+
+                # Prepare message data
+                message_data = {
+                    "session_id": self.session_id,
+                    "user_id": self.user_id,
+                    "role": role,
+                    "content": message.content,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+
+                # Add emotion data if available
+                additional_kwargs = getattr(message, 'additional_kwargs', {}) or {}
+                if additional_kwargs.get("emotion"):
+                    message_data["emotion"] = additional_kwargs["emotion"]
+                if additional_kwargs.get("emotion_text"):
+                    message_data["emotion_text"] = additional_kwargs["emotion_text"]
+                if additional_kwargs.get("probabilities"):
+                    message_data["emotion_probabilities"] = json.dumps(additional_kwargs["probabilities"])
+
+                # Insert into Supabase
+                result = await asyncio.to_thread(
+                    lambda: self.client.table(self.table_name)
+                    .insert(message_data)
+                    .execute()
+                )
+
+                # Return the inserted message ID
+                if result.data and len(result.data) > 0:
+                    return result.data[0]["id"]
+                else:
+                    # Fallback ID generation
+                    return f"{self.session_id}_{role}_{datetime.now(timezone.utc).timestamp()}"
+
+            except Exception as e:
+                logger.error(f"Failed to add message asynchronously: {e}")
+                # Return fallback ID
+                return f"{self.session_id}_{role}_{datetime.now(timezone.utc).timestamp()}"
+
+except ImportError as e:
+    logger.warning(f"Supabase message history not available: {e}")
+
+    # Fallback dummy class if langchain-community is not available
+    class SupabaseMessageHistory:
+        """Fallback dummy class when langchain is not available."""
+        def __init__(self, session_id: str, user_id: str, **kwargs):
+            self.session_id = session_id
+            self.user_id = user_id
+            logger.warning("Using fallback SupabaseMessageHistory - no persistent storage")
+
+        async def _get_messages_async(self):
+            return []
+
+        async def add_message(self, message):
+            return f"dummy_{self.session_id}_{datetime.now(timezone.utc).timestamp()}"

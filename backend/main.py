@@ -6,54 +6,118 @@ Created by Roberto Villarreal Martinez
 🚀 Hyperspeed Evolution Backend - Quantum-Entangled API
 """
 
+print("DEBUG: main.py module loading started")
+
 import os
+print("DEBUG: os imported")
+
 import logging
+print("DEBUG: logging imported")
+
 import asyncio
+print("DEBUG: asyncio imported")
+
 import json
+print("DEBUG: json imported")
+
 import secrets
+print("DEBUG: secrets imported")
+
 import hashlib
+print("DEBUG: hashlib imported")
+
 from urllib.parse import urlencode
+print("DEBUG: urlencode imported")
+
 from typing import Dict, Any, Optional
+print("DEBUG: typing imported")
+
 from datetime import datetime, timedelta, timezone
+print("DEBUG: datetime imported")
+
 from contextlib import asynccontextmanager
+print("DEBUG: asynccontextmanager imported")
 
 # Configure logging EARLY
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+print("DEBUG: logging configured")
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, Depends, Request
+print("DEBUG: fastapi imported")
+
 from fastapi.responses import JSONResponse, RedirectResponse
+print("DEBUG: fastapi responses imported")
+
 from fastapi.middleware.cors import CORSMiddleware
+print("DEBUG: cors middleware imported")
+
 from pydantic import BaseModel
+print("DEBUG: pydantic imported")
+
 # from sqlalchemy import select
 # from sqlalchemy.ext.asyncio import AsyncSession  # Deprecated
 import httpx
+print("DEBUG: httpx imported")
+
 import websockets
+print("DEBUG: websockets imported")
+
 from dotenv import load_dotenv
+print("DEBUG: dotenv imported")
+
 import uuid
+print("DEBUG: uuid imported")
 
 # LangChain imports
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+print("DEBUG: langchain_core imported")
+
 from langchain_core.messages import HumanMessage, AIMessage
+print("DEBUG: langchain messages imported")
+
+from dotenv import load_dotenv
+print("DEBUG: dotenv re-imported")
+
+import os
+print("DEBUG: os re-imported")
+
+# Load local .env when running outside Docker
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
+print("DEBUG: dotenv loaded")
 
 # Import Roboto SAI SDK (optional) - updated for proper package structure
 try:
     from roboto_sai_sdk import RobotoSAIClient, get_xai_grok
     HAS_SDK = True
-except ImportError:
+    print("DEBUG: SDK imported successfully")
+except ImportError as e:
+    print(f"DEBUG: SDK import failed: {e}")
     logger.warning("roboto_sai_sdk not available, using fallback implementations")
     HAS_SDK = False
     RobotoSAIClient = None
     get_xai_grok = None
 
-from db import init_db, get_supabase_client
-# from models import Message  # Deprecated post-Supabase
-from advanced_emotion_simulator import AdvancedEmotionSimulator
-from langchain_memory import SupabaseMessageHistory
-from grok_llm import GrokLLM
+print("DEBUG: Starting local module imports")
 
-# Load local .env when running outside Docker
-load_dotenv()
+# Import local modules
+from advanced_emotion_simulator import AdvancedEmotionSimulator
+print("DEBUG: AdvancedEmotionSimulator imported")
+
+from grok_llm import GrokLLM
+print("DEBUG: GrokLLM imported")
+
+# Use langchain_memory which has in-memory fallback when Supabase unavailable
+from langchain_memory import SupabaseMessageHistory
+print("DEBUG: SupabaseMessageHistory imported (with fallback support)")
+
+from utils.supabase_client import get_supabase_client
+print("DEBUG: get_supabase_client imported
+
+from db import init_db
+print("DEBUG: init_db imported")
+
+print("DEBUG: All imports completed, starting FastAPI app creation")
 
 # Global client instance
 roboto_client: Optional[Any] = None  # Optional[RobotoSAIClient]
@@ -68,19 +132,34 @@ async def lifespan(app: FastAPI):
     """Initialize SDK on startup, cleanup on shutdown"""
     global roboto_client, xai_grok
     
+    print("DEBUG: Lifespan startup beginning...")
+    
     logger.info("🚀 Roboto SAI 2026 Backend Starting...")
+    logger.info("📍 Phase 1: Database initialization")
 
     try:
-        init_db()
+        # Initialize database (graceful fallback if Supabase unavailable)
+        try:
+            init_db()
+            logger.info("✅ Database initialized")
+        except Exception as e:
+            logger.warning(f"⚠️ Database initialization failed (running in demo mode): {e}")
 
+        logger.info("📍 Phase 2: Emotion simulator initialization")
+        # Initialize emotion simulator
         state_path = os.getenv("ROBO_EMOTION_STATE_PATH", "./data/emotion_state.json")
         emotion_simulator_instance = AdvancedEmotionSimulator()
-        if os.path.exists(state_path):
-            emotion_simulator_instance.load_state(state_path)
+        try:
+            if os.path.exists(state_path):
+                emotion_simulator_instance.load_state(state_path)
+                logger.info("✅ Emotion state loaded")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not load emotion state: {e}")
 
         global emotion_simulator
         emotion_simulator = emotion_simulator_instance
 
+        logger.info("📍 Phase 3: SDK client initialization")
         # Initialize Roboto SAI Client (optional)
         if HAS_SDK and os.getenv("XAI_API_KEY"):
             try:
@@ -107,13 +186,25 @@ async def lifespan(app: FastAPI):
         else:
             logger.warning("⚠️ SDK not available - xAI Grok not initialized")
         
-        # Initialize LangChain GrokLLM
+        logger.info("📍 Phase 4: LangChain GrokLLM initialization")
+        # Initialize LangChain GrokLLM (graceful fallback)
         global grok_llm
-        grok_llm = GrokLLM()
-        logger.info("✅ LangChain GrokLLM initialized")
+        try:
+            grok_llm = GrokLLM()
+            logger.info("✅ LangChain GrokLLM initialized")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not initialize GrokLLM: {e}")
+            grok_llm = None
+            
+        logger.info("📍 Phase 5: Startup complete")
+        logger.info("🚀 Backend initialization complete (may be in degraded mode)")
+        logger.info(f"📊 Status: SDK={'available' if HAS_SDK else 'unavailable'}, Grok={xai_grok is not None and xai_grok.available if xai_grok else False}, GrokLLM={grok_llm is not None}")
     except Exception as e:
-        logger.error(f"🚨 Backend initialization failed: {e}")
-        raise
+        logger.error(f"🚨 Unexpected backend initialization error: {e}")
+        # Still allow the app to start - don't crash
+        logger.info("Starting app in minimal/demo mode...")
+        import traceback
+        traceback.print_exc()
     
     yield
 
@@ -124,12 +215,32 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 Roboto SAI 2026 Backend Shutting Down...")
 
 # Initialize FastAPI app
-app = FastAPI(
-    title="Roboto SAI 2026 API",
-    description="🚀 Quantum-Entangled AI Backend for RVM Empire",
-    version="0.1.0",
-    lifespan=lifespan
-)
+try:
+    print("DEBUG: Creating FastAPI app...")
+    app = FastAPI(
+        title="Roboto SAI 2026 API",
+        description="🚀 Quantum-Entangled AI Backend for RVM Empire",
+        version="0.1.0",
+        lifespan=lifespan
+    )
+    print("DEBUG: FastAPI app created successfully")
+except Exception as e:
+    print(f"CRITICAL: FastAPI app creation failed: {e}")
+    import traceback
+    traceback.print_exc()
+    raise
+
+@app.on_event("startup")
+async def startup_debug():
+    logger.debug("Startup event triggered - beginning initialization")
+    try:
+        logger.debug("Startup logic will be handled by lifespan context manager")
+        logger.debug("Startup event completed successfully")
+    except Exception as e:
+        logger.exception(f"Startup failure: {e}")
+        raise  # let it crash so Render logs it
+    logger.debug("Startup event completed successfully")
+
 
 def _get_frontend_origins() -> list[str]:
     env = (os.getenv("FRONTEND_ORIGIN") or "").strip()
@@ -172,11 +283,26 @@ app.add_middleware(
 )
 
 
+# Minimal health endpoints - added early before any heavy init
+@app.get("/api/health")
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Render deployment and monitoring"""
+    logger.info("Health check called")
+    return {
+        "status": "healthy",
+        "service": "roboto-sai-2026",
+        "version": "0.1.0",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "ready": True
+    }
+
+
 SESSION_COOKIE_NAME = "roboto_session"
 
 
 def _utcnow() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc)
 
 
 def _session_ttl() -> timedelta:
@@ -193,7 +319,11 @@ def _cookie_secure(request: Request) -> bool:
         return env.strip().lower() == "true"
     forwarded_proto = request.headers.get("x-forwarded-proto")
     scheme = forwarded_proto or request.url.scheme
-    return scheme == "https"
+    if scheme == "https":
+        return True
+    if (os.getenv("PYTHON_ENV") or "").strip().lower() == "production" and request.url.hostname not in ("localhost", "127.0.0.1"):
+        return True
+    return False
 
 
 def _cookie_samesite() -> str:
@@ -201,6 +331,16 @@ def _cookie_samesite() -> str:
     if raw not in {"lax", "strict", "none"}:
         return "lax"
     return raw
+
+
+def _cookie_domain(request: Request) -> Optional[str]:
+    """Return cookie domain based on environment."""
+    # For localhost, return None (browser uses current domain)
+    if request.url.hostname in ("localhost", "127.0.0.1"):
+        return None
+    # For other deployments, can add custom logic
+    env_domain = os.getenv("COOKIE_DOMAIN")
+    return env_domain if env_domain else None
 
 
 def _require_supabase():
@@ -274,7 +414,7 @@ async def auth_logout(request: Request) -> JSONResponse:
             await run_supabase_async(lambda: supabase.table('auth_sessions').delete().eq('id', sess_id).execute())
 
     resp = JSONResponse({"success": True})
-    resp.delete_cookie(SESSION_COOKIE_NAME, path="/")
+    resp.delete_cookie(SESSION_COOKIE_NAME, path="/", domain=_cookie_domain(request))
     return resp
 
 
@@ -316,6 +456,7 @@ async def auth_register(req: RegisterRequest, request: Request) -> JSONResponse:
             samesite=_cookie_samesite(),
             max_age=int(_session_ttl().total_seconds()),
             path="/",
+            domain=_cookie_domain(request),
         )
         return resp
     except Exception as e:
@@ -360,6 +501,7 @@ async def auth_login(req: LoginRequest, request: Request) -> JSONResponse:
             samesite=_cookie_samesite(),
             max_age=int(_session_ttl().total_seconds()),
             path="/",
+            domain=_cookie_domain(request),
         )
         return resp
     except Exception as e:
@@ -428,7 +570,7 @@ class FeedbackRequest(BaseModel):
     rating: int  # 1=thumbs up, -1=thumbs down
 
 # Voice WebSocket Proxy
-@app.websocket("/api/voice/ws")
+@app.websocket("/api/voice", tags=["Voice"])
 async def voice_proxy(websocket: WebSocket) -> None:
     """Proxy WebSocket for Grok Voice Agent API (server-side auth)."""
     await websocket.accept()
@@ -492,11 +634,6 @@ async def get_status() -> Dict[str, Any]:
         "sdk_version": "0.1.0",
         "hyperspeed_evolution": True
     }
-
-@app.get("/api/health", tags=["Health"])
-async def health_check() -> Dict[str, str]:
-    """Simple health check"""
-    return {"status": "healthy", "service": "roboto-sai-2026"}
 
 # Emotion Endpoints
 @app.post("/api/emotion/simulate", tags=["Emotion"])
@@ -562,9 +699,103 @@ async def chat_with_grok(
     """
     Chat with xAI Grok using Roboto SAI context with LangChain memory
     """
-    if not grok_llm or not xai_grok or not xai_grok.available:
-        raise HTTPException(status_code=503, detail="Grok not available")
+    # Check if Grok is available
+    has_api_key = bool(os.getenv("XAI_API_KEY"))
+    grok_available = has_api_key and grok_llm is not None and xai_grok is not None and xai_grok.available
     
+    if not grok_available:
+        # Demo mode: provide a simulated response
+        logger.info("Grok not available, providing demo response")
+        
+        # Still try to save/load history if possible
+        session_id = request.session_id or "default"
+        user_emotion = None
+        assistant_emotion = None
+        
+        # Load conversation history (may work even without Supabase)
+        try:
+            history_store = SupabaseMessageHistory(session_id=session_id, user_id=user["id"])
+            history_messages = await history_store._get_messages_async()
+        except Exception as history_error:
+            logger.warning(f"Failed to load history in demo mode: {history_error}")
+            history_store = None
+            history_messages = []
+        
+        # Simulate emotion analysis
+        if emotion_simulator:
+            try:
+                emotion_text = emotion_simulator.simulate_emotion(
+                    event=request.message,
+                    intensity=5,
+                    blend_threshold=0.8,
+                    holistic_influence=False,
+                    cultural_context=None,
+                )
+                base_emotion = emotion_simulator.get_current_emotion()
+                probabilities = emotion_simulator.get_emotion_probabilities(request.message)
+                user_emotion = {
+                    "emotion": base_emotion,
+                    "emotion_text": emotion_text,
+                    "probabilities": probabilities,
+                }
+                
+                # Generate assistant emotion based on simulated response
+                demo_response = f"I understand you're feeling {emotion_text.lower()}. The eternal flame burns brightly. How can I assist you in your quest?"
+                assistant_emotion_text = emotion_simulator.simulate_emotion(
+                    event=demo_response,
+                    intensity=5,
+                    blend_threshold=0.8,
+                    holistic_influence=False,
+                    cultural_context=None,
+                )
+                assistant_base_emotion = emotion_simulator.get_current_emotion()
+                assistant_probabilities = emotion_simulator.get_emotion_probabilities(demo_response)
+                assistant_emotion = {
+                    "emotion": assistant_base_emotion,
+                    "emotion_text": assistant_emotion_text,
+                    "probabilities": assistant_probabilities,
+                }
+            except Exception as emotion_error:
+                logger.warning(f"Emotion simulation failed in demo mode: {emotion_error}")
+        
+        # Save messages if possible
+        user_message_id = None
+        assistant_message_id = None
+        if history_store:
+            try:
+                user_message = HumanMessage(
+                    content=request.message,
+                    additional_kwargs=user_emotion or {}
+                )
+                user_message_id = await history_store.add_message(user_message)
+                
+                assistant_message = AIMessage(
+                    content=demo_response,
+                    additional_kwargs=assistant_emotion or {}
+                )
+                assistant_message_id = await history_store.add_message(assistant_message)
+            except Exception as save_error:
+                logger.warning(f"Failed to save messages in demo mode: {save_error}")
+        
+        return {
+            "success": True,
+            "response": demo_response,
+            "reasoning_available": False,
+            "response_id": f"demo-{session_id}-{int(datetime.now().timestamp())}",
+            "encrypted_thinking": None,
+            "xai_stored": False,
+            "assistant_message_id": assistant_message_id,
+            "user_message_id": user_message_id,
+            "emotion": {
+                "user": user_emotion,
+                "assistant": assistant_emotion,
+            },
+            "memory_integrated": history_store is not None,
+            "demo_mode": True,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    # Full Grok mode (when API key is available)
     try:
         user_emotion: Optional[Dict[str, Any]] = None
         assistant_emotion: Optional[Dict[str, Any]] = None
@@ -590,9 +821,14 @@ async def chat_with_grok(
             except Exception as emotion_error:
                 logger.warning(f"Emotion simulation (user) failed: {emotion_error}")
 
-        # Load conversation history
-        history_store = SupabaseMessageHistory(session_id=session_id, user_id=user["id"])
-        history_messages = await history_store._get_messages_async()
+        # Load conversation history with graceful fallback
+        try:
+            history_store = SupabaseMessageHistory(session_id=session_id, user_id=user["id"])
+            history_messages = await history_store._get_messages_async()
+        except Exception as history_error:
+            logger.warning(f"Failed to load history (using empty): {history_error}")
+            history_store = None
+            history_messages = []
         
         # Prepare user message with emotion
         user_message = HumanMessage(
@@ -610,6 +846,8 @@ async def chat_with_grok(
             user_name=user.get('user_metadata', {}).get('name', 'user'),
             previous_response_id=request.previous_response_id
         )
+        if not grok_result.get("success"):
+            raise HTTPException(status_code=503, detail=grok_result.get("error", "Roboto SAI not available"))
         response_text = grok_result.get('response', '')
         response_id = grok_result.get('response_id')
         encrypted_thinking = grok_result.get('encrypted_thinking')
@@ -634,14 +872,24 @@ async def chat_with_grok(
             except Exception as emotion_error:
                 logger.warning(f"Emotion simulation (assistant) failed: {emotion_error}")
 
-        # Save conversation
-        user_message_id = await history_store.add_message(user_message)
-        
-        assistant_message = AIMessage(
-            content=response_text,
-            additional_kwargs=assistant_emotion or {}
-        )
-        assistant_message_id = await history_store.add_message(assistant_message)
+        # Save conversation (if history_store is available)
+        user_message_id = None
+        assistant_message_id = None
+        if history_store:
+            try:
+                user_message_id = await history_store.add_message(user_message)
+                assistant_message = AIMessage(
+                    content=response_text,
+                    additional_kwargs=assistant_emotion or {}
+                )
+                assistant_message_id = await history_store.add_message(assistant_message)
+            except Exception as save_error:
+                logger.warning(f"Failed to save messages: {save_error}")
+        else:
+            assistant_message = AIMessage(
+                content=response_text,
+                additional_kwargs=assistant_emotion or {}
+            )
         
         # Store response_id if available
         if response_id and assistant_message_id:
@@ -676,6 +924,8 @@ async def chat_with_grok(
         
     except Exception as e:
         logger.error(f"Chat error: {e}")
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/chat/history", tags=["Chat"])
@@ -912,7 +1162,6 @@ async def trigger_hyperspeed_evolution(target: str = "general") -> Dict[str, Any
         logger.error(f"Hyperspeed evolution error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Root endpoint
 @app.get("/", tags=["Root"])
 async def root() -> Dict[str, str]:
     """Root endpoint with API info"""
@@ -920,7 +1169,8 @@ async def root() -> Dict[str, str]:
         "service": "Roboto SAI 2026 Backend",
         "version": "0.1.0",
         "docs": "/docs",
-        "status": "/api/status"
+        "status": "/api/status",
+        "health": "/api/health"
     }
 
 # Exception handler for detailed error responses

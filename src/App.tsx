@@ -9,7 +9,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, HashRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import Chat from "./pages/Chat";
 import Legacy from "./pages/Legacy";
@@ -31,9 +31,11 @@ const isGitHubPagesHost = () => {
   return allowedGitHubPagesHosts.includes(hostname);
 };
 
-const Router = isGitHubPagesHost() ? HashRouter : BrowserRouter;
+// Force rebuild
+const Router = HashRouter;
 
 const App = () => {
+  console.log('App loaded');
   const refreshSession = useAuthStore((state) => state.refreshSession);
 
   useEffect(() => {

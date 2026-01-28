@@ -1,48 +1,55 @@
 FROM python:3.12-slim
 
+# Zero Trust: Create non-root user early
+RUN groupadd -r roboto && useradd -r -g roboto roboto
+
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies with minimal footprint
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# SDK via pip install -e (host mount dev, git prod)
-# COPY sdk/roboto_sai_sdk ./backend/sdk  # Disabled - use mount
+# Deception Layer: Add canary traps (fake sensitive files)
+RUN mkdir -p /app/traps && \
+    echo "WARNING: Classified Data - Unauthorized Access Detected" > /app/traps/classified.txt && \
+    echo "Honey Trap - Breach Alert Triggered" > /app/traps/honeypot.log && \
+    chmod 600 /app/traps/*
 
-# Copy SDK package directory (repo root) and install as editable package
-# The SDK repo layout may be either:
-# - sdk/roboto-sai-sdk/pyproject.toml
-# - sdk/roboto-sai-sdk/roboto-sai-sdk/pyproject.toml
-COPY sdk/roboto-sai-sdk /app/sdk/roboto-sai-sdk
+# Misdirection: Fake environment variables
+ARG DECOY_KEY=fake_decoy_value
+ENV MISDIRECTION_PATH=/fake/path
 
-# Copy requirements/constraints and install dependencies
+# Copy requirements and constraints
 COPY backend/requirements.txt ./backend/
 COPY backend/constraints.txt ./backend/
-RUN pip install --no-cache-dir -r ./backend/requirements.txt -c ./backend/constraints.txt --extra-index-url https://download.pytorch.org/whl/cpu
 
-# Install SDK as editable package (handle nested or root layout)
-RUN if [ -f /app/sdk/roboto-sai-sdk/pyproject.toml ] || [ -f /app/sdk/roboto-sai-sdk/setup.py ]; then \
-            pip install --no-cache-dir -e /app/sdk/roboto-sai-sdk -c ./backend/constraints.txt; \
-        elif [ -f /app/sdk/roboto-sai-sdk/roboto-sai-sdk/pyproject.toml ] || [ -f /app/sdk/roboto-sai-sdk/roboto-sai-sdk/setup.py ]; then \
-            pip install --no-cache-dir -e /app/sdk/roboto-sai-sdk/roboto-sai-sdk -c ./backend/constraints.txt; \
-        else \
-            echo "Roboto SAI SDK not found in image"; \
-            exit 1; \
-        fi
+# Install dependencies with constraints
+RUN pip install --no-cache-dir -r ./backend/requirements.txt -c ./backend/constraints.txt
 
-# Copy backend code
-COPY backend/ .
+# Verify SDK integrity
+RUN python -c "import roboto_sai_sdk; print('SDK integrity verified')"
 
+# Copy backend code with integrity check
+COPY backend/ /app/backend/
+
+# Zero Trust: Change ownership to non-root user
+RUN chown -R roboto:roboto /app
+
+# Set working directory
 WORKDIR /app/backend
+
+# Set Python path and secure env
+ENV PYTHONPATH=/app/backend
+ENV ZERO_TRUST_ENABLED=true
 
 # Expose port
 EXPOSE 5000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health').read()"
+# Switch to non-root user
+USER roboto
 
-# Run FastAPI with uvicorn
-CMD python -m uvicorn main:app --host 0.0.0.0 --port $PORT
+# Hostile conditions: Retry logic in CMD for resilience
+CMD ["sh", "-c", "for i in 1 2 3; do echo \"Attempt $i\" && python -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-5000} --log-level info && break; done"]

@@ -16,7 +16,7 @@ services:
       - key: XAI_API_KEY
         sync: false
       - key: FRONTEND_ORIGIN
-        value: https://roboto-sai-fuego.onrender.com
+        value: https://roboto-sai-frontend.onrender.com,https://roboto-sai-fuego.onrender.com
       - key: FRONTEND_HASH_ROUTER
         value: "true"
       - key: SUPABASE_URL
@@ -31,6 +31,12 @@ services:
         value: "production"
       - key: ROBO_EMOTION_STATE_PATH
         value: "/var/data/emotion_state.json"
+      - key: PYTHONPATH
+        value: "/app/backend"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: "none"
     healthCheckPath: /api/health
     autoDeployTrigger: commit
 
