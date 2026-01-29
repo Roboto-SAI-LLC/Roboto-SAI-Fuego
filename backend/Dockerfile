@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 # Zero Trust: Create non-root user early
 RUN groupadd -r roboto && useradd -r -g roboto roboto
