@@ -72,6 +72,7 @@ from grok_llm import GrokLLM
 from langchain_memory import SupabaseMessageHistory
 from utils.supabase_client import get_supabase_client
 from db import init_db
+from payments import router as payments_router
 
 # Global client instance
 roboto_client: Optional[Any] = None
@@ -211,6 +212,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+)
+
+
+# Mount payments router
+app.include_router(payments_router)
+
+# Mount agent router
+from agent_loop import router as agent_router
+app.include_router(agent_router)
+
+# Mount MCP router
+from mcp_router import router as mcp_router
+app.include_router(mcp_router)
 
 
 # Minimal health endpoints - added early before any heavy init

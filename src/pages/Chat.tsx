@@ -43,23 +43,25 @@ const getApiBaseUrl = (): string => {
 const Chat = () => {
   const navigate = useNavigate();
   const { userId, isLoggedIn, refreshSession } = useAuthStore();
-  const { 
-    getMessages, 
-    isLoading, 
-    ventMode, 
-    voiceMode, 
-    currentTheme, 
-    addMessage, 
-    setLoading, 
-    toggleVentMode, 
+  const {
+    getMessages,
+    isLoading,
+    ventMode,
+    voiceMode,
+    currentTheme,
+    addMessage,
+    setLoading,
+    toggleVentMode,
     toggleVoiceMode,
+    agentMode,
+    toggleAgentMode,
     getAllConversationsContext,
     loadUserHistory,
     userId: storeUserId
   } = useChatStore();
-  
+
   const { buildContextForAI, addMemory, addConversationSummary, trackEntity, isReady: memoryReady } = useMemoryStore();
-  
+
   const messages = getMessages();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -145,44 +147,46 @@ const Chat = () => {
     try {
       const conversationId = addMessage({ role: 'user', content, attachments });
       const sessionId = conversationId;
-      
+
       // Build context from both conversation history and memory system
       const conversationContext = getAllConversationsContext();
       const memoryContext = memoryReady ? buildContextForAI(content) : '';
-      
+
       // Combine contexts intelligently
-      const combinedContext = memoryContext 
+      const combinedContext = memoryContext
         ? `${memoryContext}\n\n## Recent Conversation\n${conversationContext}`
         : conversationContext;
 
       const apiBaseUrl = getApiBaseUrl();
-      const chatUrl = apiBaseUrl ? `${apiBaseUrl}/api/chat` : '/api/chat';
-      
+      const chatUrl = apiBaseUrl
+        ? `${apiBaseUrl}${agentMode ? '/api/agent/chat' : '/api/chat'}`
+        : (agentMode ? '/api/agent/chat' : '/api/chat');
+
       const payload = {
         message: content,
         context: combinedContext,
         session_id: sessionId,
         user_id: userId,
       };
-      
+
       const response = await fetch(chatUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(payload),
       });
-      
+
       const data = (await response.json()) as ChatApiResponse;
-      
+
       if (!response.ok) {
         const errorMessage = data.detail || data.error || `Request failed (${response.status})`;
         throw new Error(errorMessage);
       }
-      
+
       const assistantContent = data.response || data.content || 'Flame response received.';
-      
-      addMessage({ 
-        role: 'assistant', 
+
+      addMessage({
+        role: 'assistant',
         content: assistantContent,
         id: data.assistant_message_id || undefined,
       });
@@ -246,11 +250,10 @@ const Chat = () => {
                 animate={{ opacity: 1, y: 0 }}
                 className="text-center py-20"
               >
-                <div className={`inline-flex items-center justify-center w-24 h-24 rounded-full mb-6 ${
-                  ventMode 
-                    ? 'bg-blood/20 border border-blood/30' 
-                    : 'bg-gradient-to-br from-fire/20 to-blood/20 border border-fire/30 animate-pulse-fire'
-                }`}>
+                <div className={`inline-flex items-center justify-center w-24 h-24 rounded-full mb-6 ${ventMode
+                  ? 'bg-blood/20 border border-blood/30'
+                  : 'bg-gradient-to-br from-fire/20 to-blood/20 border border-fire/30 animate-pulse-fire'
+                  }`}>
                   {ventMode ? (
                     <Skull className="w-12 h-12 text-blood" />
                   ) : (
@@ -261,7 +264,7 @@ const Chat = () => {
                   {ventMode ? 'VENT MODE ACTIVE' : 'Welcome to Roboto SAI'}
                 </h2>
                 <p className="text-muted-foreground max-w-md mx-auto mb-2">
-                  {ventMode 
+                  {ventMode
                     ? 'The rage flows through the circuits. Speak your fury.'
                     : 'The eternal flame awaits your words. Speak, and the Regio-Aztec genome shall respond.'
                   }
@@ -299,6 +302,8 @@ const Chat = () => {
           onVentToggle={toggleVentMode}
           voiceMode={voiceMode}
           onVoiceToggle={toggleVoiceMode}
+          agentMode={agentMode}
+          onAgentToggle={toggleAgentMode}
         />
       </main>
 

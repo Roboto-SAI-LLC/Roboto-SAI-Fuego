@@ -44,13 +44,14 @@ interface ChatState {
   ventMode: boolean;
   currentTheme: string;
   voiceMode: boolean;
+  agentMode: boolean;
   userId: string | null;
-  
+
   // Getters
   getCurrentConversation: () => Conversation | undefined;
   getMessages: () => Message[];
   getAllConversationsContext: () => string;
-  
+
   // Actions
   createNewConversation: () => string;
   selectConversation: (id: string) => void;
@@ -61,6 +62,7 @@ interface ChatState {
   setTheme: (theme: string) => void;
   clearMessages: () => void;
   toggleVoiceMode: () => void;
+  toggleAgentMode: () => void;
   loadUserHistory: (userId: string) => Promise<void>;
   resetConversations: () => void;
 }
@@ -136,17 +138,18 @@ export const useChatStore = create<ChatState>()(
       ventMode: false,
       currentTheme: 'Regio-Aztec Fire #42',
       voiceMode: false,
+      agentMode: false,
       userId: null,
       getCurrentConversation: () => {
         const state = get();
         return state.conversations.find(c => c.id === state.currentConversationId);
       },
-      
+
       getMessages: () => {
         const conversation = get().getCurrentConversation();
         return conversation?.messages || [];
       },
-      
+
       getAllConversationsContext: () => {
         const state = get();
         const allMessages = (state.conversations ?? [])
@@ -176,7 +179,7 @@ export const useChatStore = create<ChatState>()(
           .join('\n');
         return context.length > 100000 ? context.substring(0, 100000) + '\n... (truncated)' : context; // Increased total cap to 100k chars
       },
-      
+
       createNewConversation: () => {
         const newId = crypto.randomUUID();
         const newConversation: Conversation = {
@@ -186,23 +189,23 @@ export const useChatStore = create<ChatState>()(
           createdAt: new Date(),
           updatedAt: new Date(),
         };
-        
+
         set((state) => ({
           conversations: [newConversation, ...state.conversations],
           currentConversationId: newId,
         }));
-        
+
         return newId;
       },
-      
+
       selectConversation: (id) => {
         set({ currentConversationId: id });
       },
-      
+
       deleteConversation: (id) => {
         set((state) => {
           const filtered = state.conversations.filter(c => c.id !== id);
-          const newCurrentId = state.currentConversationId === id 
+          const newCurrentId = state.currentConversationId === id
             ? (filtered[0]?.id || null)
             : state.currentConversationId;
           return {
@@ -211,14 +214,14 @@ export const useChatStore = create<ChatState>()(
           };
         });
       },
-      
+
       addMessage: (message) => {
         let createdConversationId: string | null = null;
 
         set((state) => {
           let conversationId = state.currentConversationId;
           let conversations = [...state.conversations];
-          
+
           // Create new conversation if none exists
           if (!conversationId) {
             conversationId = crypto.randomUUID();
@@ -231,24 +234,24 @@ export const useChatStore = create<ChatState>()(
             };
             conversations = [newConversation, ...conversations];
           }
-          
+
           const newMessage: Message = {
             ...message,
-            id: typeof message.id === 'string' 
-              ? message.id 
+            id: typeof message.id === 'string'
+              ? message.id
               : crypto.randomUUID(),
             timestamp: new Date(),
             session_id: conversationId,
           };
-          
+
           conversations = conversations.map(conv => {
             if (conv.id === conversationId) {
               const updatedMessages = [...conv.messages, newMessage];
               // Update title if first user message
-              const shouldUpdateTitle = conv.title === 'New Chat' && 
-                message.role === 'user' && 
+              const shouldUpdateTitle = conv.title === 'New Chat' &&
+                message.role === 'user' &&
                 conv.messages.length === 0;
-              
+
               return {
                 ...conv,
                 messages: updatedMessages,
@@ -258,7 +261,7 @@ export const useChatStore = create<ChatState>()(
             }
             return conv;
           });
-          
+
           createdConversationId = conversationId;
 
           return {
@@ -269,28 +272,29 @@ export const useChatStore = create<ChatState>()(
 
         return createdConversationId ?? crypto.randomUUID();
       },
-      
+
       setLoading: (loading) => set({ isLoading: loading }),
-      
+
       toggleVentMode: () => set((state) => ({ ventMode: !state.ventMode })),
-      
+
       setTheme: (theme) => set({ currentTheme: theme }),
-      
+
       clearMessages: () => {
         set((state) => {
           if (!state.currentConversationId) return state;
-          
+
           return {
-            conversations: state.conversations.map(conv => 
-              conv.id === state.currentConversationId 
+            conversations: state.conversations.map(conv =>
+              conv.id === state.currentConversationId
                 ? { ...conv, messages: [], updatedAt: new Date() }
                 : conv
             ),
           };
         });
       },
-      
+
       toggleVoiceMode: () => set((state) => ({ voiceMode: !state.voiceMode })),
+      toggleAgentMode: () => set((state) => ({ agentMode: !state.agentMode })),
       loadUserHistory: async (userId: string) => {
         try {
           set({ conversations: [], currentConversationId: null, userId });
@@ -302,7 +306,7 @@ export const useChatStore = create<ChatState>()(
           if (!res.ok) throw new Error('Failed to load history');
           const data = await res.json();
           const messages = data.messages || [];
-          
+
           // Group by session_id
           const groups = new Map<string, Conversation>();
           messages.forEach((msg: Message & { created_at?: string }) => {
@@ -321,12 +325,12 @@ export const useChatStore = create<ChatState>()(
             const createdAt = msg.created_at ? new Date(msg.created_at) : new Date();
             const probabilities = typeof msg.emotion_probabilities === 'string'
               ? (() => {
-                  try {
-                    return JSON.parse(msg.emotion_probabilities as string);
-                  } catch {
-                    return undefined;
-                  }
-                })()
+                try {
+                  return JSON.parse(msg.emotion_probabilities as string);
+                } catch {
+                  return undefined;
+                }
+              })()
               : msg.emotion_probabilities;
 
             const storeMsg: Message = {
@@ -351,15 +355,15 @@ export const useChatStore = create<ChatState>()(
               conv.createdAt = createdAt;
             }
           });
-          
-          const convs = Array.from(groups.values()).sort((a, b) => 
+
+          const convs = Array.from(groups.values()).sort((a, b) =>
             b.updatedAt.getTime() - a.updatedAt.getTime()
           );
-          
-          set({ 
+
+          set({
             conversations: convs,
             userId,
-            currentConversationId: convs[0]?.id || null 
+            currentConversationId: convs[0]?.id || null
           });
         } catch (error) {
           console.error('Load history failed:', error);
@@ -396,8 +400,8 @@ export const useChatStore = create<ChatState>()(
 
         const revivedConversations = Array.isArray(rawState.conversations)
           ? (rawState.conversations as unknown[])
-              .map(reviveConversation)
-              .filter((c): c is Conversation => c !== null)
+            .map(reviveConversation)
+            .filter((c): c is Conversation => c !== null)
           : [];
 
         const validCurrentId = revivedConversations.find(c => c.id === rawState.currentConversationId)?.id || null;
