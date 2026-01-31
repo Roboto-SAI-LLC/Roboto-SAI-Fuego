@@ -29,7 +29,7 @@ router = APIRouter()
 
 # Initialize Stripe
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-print(f"DEBUG: Stripe initialized with key starting: {stripe.api_key[:8] if stripe.api_key else 'None'}")
+logger.debug("Stripe initialized: secret key configured=%s", bool(stripe.api_key))
 
 
 class CheckoutRequest(BaseModel):
