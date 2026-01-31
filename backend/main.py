@@ -165,6 +165,23 @@ app = FastAPI(
 async def startup_event():
     logger.info("Startup event triggered")
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error. Please try again later."}
+    )
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError):
+    logger.warning(f"Value error: {exc}")
+    return JSONResponse(
+        status_code=400,
+        content={"detail": str(exc)}
+    )
+
+
 
 def _get_frontend_origins() -> list[str]:
     env = (os.getenv("FRONTEND_ORIGIN") or "").strip()
@@ -231,18 +248,25 @@ except ImportError as e:
     logger.warning(f"Payments router not available: {e}")
 
 try:
-    from .agent_loop import router as agent_router
+    from agent_loop import router as agent_router
     app.include_router(agent_router)
     logger.info("Agent router mounted")
 except ImportError as e:
     logger.warning(f"Agent router not available: {e}")
 
 try:
-    from .mcp_router import router as mcp_router
+    from mcp_router import router as mcp_router
     app.include_router(mcp_router)
     logger.info("MCP router mounted")
 except ImportError as e:
     logger.warning(f"MCP router not available: {e}")
+
+try:
+    from voice_router import router as voice_router
+    app.include_router(voice_router)
+    logger.info("Voice router mounted")
+except ImportError as e:
+    logger.warning(f"Voice router not available: {e}")
 
 
 # Minimal health endpoints - added early before any heavy init

@@ -263,7 +263,8 @@ class GrokLLM(LLM):
         
         try:
             logger.info(f"Calling Grok API: {url}")
-            with httpx.Client(timeout=60.0) as client:
+            # Increased timeout to 120s to handle slow responses or cold starts
+            with httpx.Client(timeout=120.0) as client:
                 response = client.post(url, json=payload, headers=headers)
                 
                 # Log response for debugging
@@ -299,6 +300,9 @@ class GrokLLM(LLM):
             
             logger.error(f"Grok API HTTP error {e.response.status_code}: {error_detail}")
             return {"success": False, "error": f"Grok API HTTP error: {e.response.status_code} - {error_detail}"}
+        except httpx.ReadTimeout:
+            logger.error("Grok API request timed out")
+            return {"success": False, "error": "Grok API request timed out. The model is taking too long to respond."}
         except httpx.HTTPError as e:
             logger.error(f"Grok API connection error: {e}")
             return {"success": False, "error": f"Grok API connection error: {str(e)}"}
@@ -427,11 +431,13 @@ class GrokLLM(LLM):
         return {"success": False, "error": "OpenAI fallback failed. Verify OPENAI_API_KEY and model access."}
 
     def _build_from_messages(self, messages: List[BaseMessage]) -> tuple[str, str, Optional[str]]:
-        context_parts = []
-        for msg in messages[:-1]:
-            role = "User" if isinstance(msg, HumanMessage) else "Assistant"
-            context_parts.append(f"{role}: {msg.content}")
+        # Performance: Use list comprehension generator
+        context_parts = (
+            f"{'User' if isinstance(msg, HumanMessage) else 'Assistant'}: {msg.content}" 
+            for msg in messages[:-1]
+        )
         context = "\n".join(context_parts)
+        
         last_msg = messages[-1]
         user_message = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
 
