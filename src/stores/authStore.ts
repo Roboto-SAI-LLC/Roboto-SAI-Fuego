@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { config } from '../config';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -88,55 +89,117 @@ export const useAuthStore = create<AuthState>()(
       isLoggedIn: false,
 
       refreshSession: async () => {
-        if (!supabase) {
-          set({ userId: null, username: null, email: null, avatarUrl: null, provider: null, isLoggedIn: false });
-          return false;
+        // Use backend auth endpoint to check session
+        try {
+          const meUrl = `${config.apiBaseUrl}/api/auth/me`;
+          const response = await fetch(meUrl, {
+            method: 'GET',
+            credentials: 'include',
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.user) {
+              set({
+                userId: data.user.id,
+                username: data.user.display_name || data.user.email?.split('@')[0] || null,
+                email: data.user.email,
+                avatarUrl: data.user.avatar_url || null,
+                provider: data.user.provider || 'supabase',
+                isLoggedIn: true,
+              });
+              return true;
+            }
+          }
+        } catch (error) {
+          console.warn('Session refresh failed:', error);
         }
-        const { data, error } = await supabase.auth.getSession();
-        if (error || !data.session) {
-          set({ userId: null, username: null, email: null, avatarUrl: null, provider: null, isLoggedIn: false });
-          return false;
-        }
-        const user = data.session.user;
-        set({
-          userId: user.id,
-          username: user.user_metadata?.display_name || user.email?.split('@')[0] || null,
-          email: user.email || null,
-          avatarUrl: user.user_metadata?.avatar_url || null,
-          provider: user.app_metadata?.provider || 'supabase',
-          isLoggedIn: true,
-        });
-        return true;
+
+        // Session invalid or request failed
+        set({ userId: null, username: null, email: null, avatarUrl: null, provider: null, isLoggedIn: false });
+        return false;
       },
 
       register: async (email: string, password: string) => {
-        if (!supabase) {
-          throw new Error('Authentication service not configured. Please contact support.');
+        // Use backend auth endpoint to get session cookie
+        const registerUrl = `${config.apiBaseUrl}/api/auth/register`;
+
+        const response = await fetch(registerUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ email, password }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ detail: 'Registration failed' }));
+          throw new Error(errorData.detail || 'Registration failed');
         }
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
+
+        // Registration successful - user should check email for confirmation
+        // Don't set login state until they confirm email
       },
 
       loginWithPassword: async (email: string, password: string) => {
-        if (!supabase) {
-          throw new Error('Authentication service not configured. Please contact support.');
+        // Use backend auth endpoint to get session cookie
+        const loginUrl = `${config.apiBaseUrl}/api/auth/login`;
+
+        const response = await fetch(loginUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ email, password }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ detail: 'Login failed' }));
+          throw new Error(errorData.detail || 'Login failed');
         }
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+
+        const data = await response.json();
+        if (data.success && data.user) {
+          set({
+            userId: data.user.id,
+            username: data.user.display_name || data.user.email?.split('@')[0] || null,
+            email: data.user.email,
+            avatarUrl: data.user.avatar_url || null,
+            provider: data.user.provider || 'supabase',
+            isLoggedIn: true,
+          });
+        } else {
+          throw new Error('Login response missing user data');
+        }
       },
 
       requestMagicLink: async (email: string) => {
-        if (!supabase) {
-          throw new Error('Authentication service not configured. Please contact support.');
+        // Use backend auth endpoint for magic links
+        const magicUrl = `${config.apiBaseUrl}/api/auth/magic/request`;
+
+        const response = await fetch(magicUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ detail: 'Magic link request failed' }));
+          throw new Error(errorData.detail || 'Magic link request failed');
         }
-        const { error } = await supabase.auth.signInWithOtp({ email });
-        if (error) throw error;
       },
 
       logout: async () => {
-        if (supabase) {
-          await supabase.auth.signOut();
+        // Use backend auth endpoint to clear session cookie
+        try {
+          const logoutUrl = `${config.apiBaseUrl}/api/auth/logout`;
+          await fetch(logoutUrl, {
+            method: 'POST',
+            credentials: 'include',
+          });
+        } catch (error) {
+          console.warn('Backend logout failed, clearing local state anyway:', error);
         }
+
+        // Clear local state regardless of backend response
         set({ userId: null, username: null, email: null, avatarUrl: null, provider: null, isLoggedIn: false });
       },
     }),
