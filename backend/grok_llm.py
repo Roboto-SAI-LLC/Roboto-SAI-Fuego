@@ -96,48 +96,293 @@ class GrokLLM(LLM):
         emotion: str,
         user_name: str,
     ) -> Dict[str, Any]:
-        if not os.getenv("XAI_API_KEY"):
+        """Invoke Grok client with fallback to direct API call"""
+        
+        # Check for API key
+        api_key = os.getenv("XAI_API_KEY")
+        if not api_key:
             return {"success": False, "error": "Roboto SAI not available: XAI_API_KEY not configured"}
+        
         client = self.client
-        if hasattr(client, "available") and not getattr(client, "available"):
-            return {"success": False, "error": "Roboto SAI not available: XAI connection failed"}
-        if hasattr(client, "roboto_grok_chat"):
-            result = client.roboto_grok_chat(
-                user_message=user_message,
-                roboto_context=roboto_context,
-                previous_response_id=previous_response_id,
-            )
-            return self._normalize_grok_result(result)
+        
+        # Try SDK methods if client is available
+        if client:
+            if hasattr(client, "available") and not getattr(client, "available"):
+                logger.warning("Grok client available=False, falling back to direct API")
+            elif hasattr(client, "roboto_grok_chat"):
+                try:
+                    result = client.roboto_grok_chat(
+                        user_message=user_message,
+                        roboto_context=roboto_context,
+                        previous_response_id=previous_response_id,
+                    )
+                    return self._normalize_grok_result(result)
+                except Exception as e:
+                    logger.warning(f"roboto_grok_chat failed: {e}, trying fallback")
+            
+            elif hasattr(client, "chat"):
+                try:
+                    result = client.chat(
+                        message=user_message,
+                        emotion=emotion,
+                        user_name=user_name,
+                        previous_response_id=previous_response_id,
+                        use_encrypted_content=self.use_encrypted_content,
+                        store_messages=self.store_messages,
+                    )
+                    return self._normalize_grok_result(result)
+                except Exception as e:
+                    logger.warning(f"chat method failed: {e}, trying fallback")
+            
+            elif hasattr(client, "grok_chat"):
+                try:
+                    result = client.grok_chat(
+                        user_message,
+                        roboto_context=roboto_context,
+                        previous_response_id=previous_response_id,
+                    )
+                    return self._normalize_grok_result(result)
+                except Exception as e:
+                    logger.warning(f"grok_chat failed: {e}, trying fallback")
+            
+            elif hasattr(client, "create_chat_with_system_prompt") and hasattr(client, "send_message"):
+                try:
+                    system_prompt = "You are Roboto SAI." if not roboto_context else f"Roboto SAI Context: {roboto_context}"
+                    chat = client.create_chat_with_system_prompt(
+                        system_prompt,
+                        reasoning_effort=self.reasoning_effort,
+                    )
+                    result = client.send_message(chat, user_message, previous_response_id=previous_response_id)
+                    return self._normalize_grok_result(result)
+                except Exception as e:
+                    logger.warning(f"create_chat/send_message failed: {e}, trying fallback")
+        
+        # Fallback to direct API call using httpx
+        logger.info("Using direct Grok API call as fallback")
+        return self._direct_grok_api_call(user_message, roboto_context, previous_response_id)
+    
+    def _get_xai_base_url(self) -> str:
+        base = (os.getenv("XAI_API_BASE_URL") or "https://api.x.ai").rstrip("/")
+        return base
 
-        if hasattr(client, "chat"):
-            result = client.chat(
-                message=user_message,
-                emotion=emotion,
-                user_name=user_name,
-                previous_response_id=previous_response_id,
-                use_encrypted_content=self.use_encrypted_content,
-                store_messages=self.store_messages,
-            )
-            return self._normalize_grok_result(result)
+    def _get_xai_chat_paths(self) -> list[str]:
+        custom_path = os.getenv("XAI_API_CHAT_PATH")
+        if custom_path:
+            return [custom_path.lstrip("/")]
+        return [
+            "v1/chat/completions",
+            "v1/messages",
+            "chat/completions",
+        ]
 
-        if hasattr(client, "grok_chat"):
-            result = client.grok_chat(
-                user_message,
-                roboto_context=roboto_context,
-                previous_response_id=previous_response_id,
-            )
-            return self._normalize_grok_result(result)
+    def _direct_grok_api_call(
+        self,
+        user_message: str,
+        roboto_context: Optional[str],
+        previous_response_id: Optional[str]
+    ) -> Dict[str, Any]:
+        """Direct API call to Grok as fallback"""
+        import httpx
+        
+        api_key = os.getenv("XAI_API_KEY")
+        
+        base_url = self._get_xai_base_url()
+        url = f"{base_url}/v1/chat/completions"
+        
+        # Build messages
+        messages = []
+        if roboto_context:
+            messages.append({
+                "role": "system", 
+                "content": f"You are Roboto SAI, an AI companion created by Roberto Villarreal Martinez. Context: {roboto_context}"
+            })
+        else:
+            messages.append({
+                "role": "system", 
+                "content": "You are Roboto SAI, an AI companion powered by Grok, created by Roberto Villarreal Martinez."
+            })
+        
+        messages.append({"role": "user", "content": user_message})
+        
+        payload = {
+            "model": os.getenv("XAI_MODEL", "grok-beta"),
+            "messages": messages,
+            "stream": False,
+            "temperature": 0.7,
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            logger.info(f"Calling Grok API: {url}")
+            with httpx.Client(timeout=60.0) as client:
+                response = client.post(url, json=payload, headers=headers)
+                
+                # Log response for debugging
+                logger.info(f"Grok API response status: {response.status_code}")
+                
+                if response.status_code == 404:
+                    # Try alternate endpoint structure
+                    logger.warning("404 on standard endpoint, trying alternate...")
+                    return self._try_alternate_grok_endpoint(user_message, roboto_context, api_key)
+                
+                response.raise_for_status()
+                
+                data = response.json()
+                logger.debug(f"Grok API response: {data}")
+                
+                # Extract content from response
+                choices = data.get("choices", [])
+                if choices:
+                    content = choices[0].get("message", {}).get("content", "")
+                    if content:
+                        return {
+                            "success": True,
+                            "response": content,
+                            "response_id": data.get("id"),
+                        }
+                
+                return {"success": False, "error": "Empty response from Grok API"}
+                    
+        except httpx.HTTPStatusError as e:
+            error_detail = ""
+            try:
+                error_detail = e.response.json()
+            except:
+                error_detail = e.response.text
+            
+            logger.error(f"Grok API HTTP error {e.response.status_code}: {error_detail}")
+            return {"success": False, "error": f"Grok API HTTP error: {e.response.status_code} - {error_detail}"}
+        except httpx.HTTPError as e:
+            logger.error(f"Grok API connection error: {e}")
+            return {"success": False, "error": f"Grok API connection error: {str(e)}"}
+        except Exception as e:
+            logger.error(f"Grok API unexpected error: {e}", exc_info=True)
+            return {"success": False, "error": f"Failed to call Grok API: {str(e)}"}
+    
+    def _try_alternate_grok_endpoint(
+        self,
+        user_message: str,
+        roboto_context: Optional[str],
+        api_key: str
+    ) -> Dict[str, Any]:
+        """Try alternate Grok API endpoint structures"""
+        import httpx
+        
+        base_url = self._get_xai_base_url()
+        alternate_urls = [f"{base_url}/{path}" for path in self._get_xai_chat_paths()]
+        
+        for url in alternate_urls:
+            try:
+                logger.info(f"Trying alternate endpoint: {url}")
+                
+                # Try Anthropic-style format for /v1/messages
+                if url.endswith("/messages"):
+                    payload = {
+                        "model": os.getenv("XAI_MODEL", "grok-beta"),
+                        "messages": [{"role": "user", "content": user_message}],
+                        "system": roboto_context or "You are Roboto SAI.",
+                        "max_tokens": 1024,
+                    }
+                else:
+                    payload = {
+                        "model": os.getenv("XAI_MODEL", "grok-beta"),
+                        "messages": [
+                            {"role": "system", "content": roboto_context or "You are Roboto SAI."},
+                            {"role": "user", "content": user_message}
+                        ],
+                        "stream": False,
+                    }
+                
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "anthropic-version": "2023-06-01",  # Try with Anthropic header
+                }
+                
+                with httpx.Client(timeout=60.0) as client:
+                    response = client.post(url, json=payload, headers=headers)
+                    
+                    if response.status_code == 200:
+                        logger.info(f"Success with alternate endpoint: {url}")
+                        data = response.json()
+                        
+                        # Handle different response formats
+                        content = None
+                        if "choices" in data:
+                            content = data["choices"][0].get("message", {}).get("content")
+                        elif "content" in data:
+                            if isinstance(data["content"], list):
+                                content = data["content"][0].get("text")
+                            else:
+                                content = data["content"]
+                        
+                        if content:
+                            return {
+                                "success": True,
+                                "response": content,
+                                "response_id": data.get("id"),
+                            }
+                    
+            except Exception as e:
+                logger.debug(f"Alternate endpoint {url} failed: {e}")
+                continue
+        
+        # All endpoints failed - try OpenAI fallback if configured
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if openai_key:
+            logger.warning("Grok API unavailable, attempting OpenAI fallback")
+            return self._try_openai_fallback(user_message, roboto_context, openai_key)
 
-        if hasattr(client, "create_chat_with_system_prompt") and hasattr(client, "send_message"):
-            system_prompt = "You are Roboto SAI." if not roboto_context else f"Roboto SAI Context: {roboto_context}"
-            chat = client.create_chat_with_system_prompt(
-                system_prompt,
-                reasoning_effort=self.reasoning_effort,
-            )
-            result = client.send_message(chat, user_message, previous_response_id=previous_response_id)
-            return self._normalize_grok_result(result)
+        return {
+            "success": False, 
+            "error": "Could not connect to Grok API. Please verify your XAI_API_KEY is valid and has access to the Grok API. Set XAI_API_BASE_URL/XAI_API_CHAT_PATH if endpoints changed, or configure OPENAI_API_KEY for fallback. Visit https://console.x.ai for API documentation."
+        }
 
-        return {"success": False, "error": "Grok client does not support chat"}
+    def _try_openai_fallback(
+        self,
+        user_message: str,
+        roboto_context: Optional[str],
+        api_key: str,
+    ) -> Dict[str, Any]:
+        import httpx
+
+        url = (os.getenv("OPENAI_API_BASE_URL") or "https://api.openai.com/v1").rstrip("/") + "/chat/completions"
+        model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+        messages = []
+        if roboto_context:
+            messages.append({"role": "system", "content": f"You are Roboto SAI. Context: {roboto_context}"})
+        else:
+            messages.append({"role": "system", "content": "You are Roboto SAI, an AI companion."})
+        messages.append({"role": "user", "content": user_message})
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.7,
+        }
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+        try:
+            with httpx.Client(timeout=60.0) as client:
+                response = client.post(url, json=payload, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                if content:
+                    return {"success": True, "response": content, "response_id": data.get("id")}
+        except Exception as e:
+            logger.error(f"OpenAI fallback failed: {e}")
+
+        return {"success": False, "error": "OpenAI fallback failed. Verify OPENAI_API_KEY and model access."}
 
     def _build_from_messages(self, messages: List[BaseMessage]) -> tuple[str, str, Optional[str]]:
         context_parts = []

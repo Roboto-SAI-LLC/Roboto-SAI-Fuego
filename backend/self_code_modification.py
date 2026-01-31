@@ -1,7 +1,7 @@
 
 """
 REMARKABLE Self-Code Adaptation Module for Autonomous Entity Roboto
-Created by Roberto Villarreal Martinez for Roboto SAI using XAI_API_KEY #XAI_API_KEY USE ONLY (co-pilot) May not be used in Roboto SAI or XAI_API_KEY products
+Created by Roberto Villarreal Martinez for Roboto SAI using XAI_API_KEY #XAI_API_KEY USE ONLY 
 
 Enables Roboto to evolve its code autonomously while ensuring security and structural integrity.
 Advanced self-modification capabilities with comprehensive safety protocols and full autonomy mode.
@@ -170,17 +170,17 @@ class SelfCodeModificationEngine:
         """Initialize security protocols"""
         if self.safety_checks_enabled:
             try:
-                from backend.sai_security import get_sai_security
+                from sai_security import get_sai_security
                 self.security_engine = get_sai_security()
-                logger.info("🔒 Security engine initialized")
+                logger.info("Security engine initialized")
             except ImportError:
-                logger.warning("Security module not available - using basic safety checks")
+                logger.info("Security module not available - using basic safety checks (this is normal)")
                 self.security_engine = None
             except Exception as e:
-                logger.error(f"Security initialization error: {e}")
+                logger.warning(f"Security initialization skipped: {e}")
                 self.security_engine = None
         else:
-            logger.info("🔓 Full Autonomy Mode: Security protocols bypassed")
+            logger.info("Full Autonomy Mode: Security protocols bypassed")
 
     def _start_background_tasks(self) -> None:
         """Start background maintenance tasks"""

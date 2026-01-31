@@ -3,124 +3,62 @@ Roboto SAI 2026 - FastAPI Backend
 Integrates roboto-sai-sdk with React frontend
 Created by Roberto Villarreal Martinez
 
-🚀 Hyperspeed Evolution Backend - Quantum-Entangled API
+Production-Ready API for Roboto SAI AI Companion
 """
 
-print("DEBUG: main.py module loading started")
-
 import os
-print("DEBUG: os imported")
-
 import logging
-print("DEBUG: logging imported")
-
 import asyncio
-print("DEBUG: asyncio imported")
-
 import json
-print("DEBUG: json imported")
-
 import secrets
-print("DEBUG: secrets imported")
-
 import hashlib
-print("DEBUG: hashlib imported")
-
 from urllib.parse import urlencode
-print("DEBUG: urlencode imported")
-
 from typing import Dict, Any, Optional
-print("DEBUG: typing imported")
-
 from datetime import datetime, timedelta, timezone
-print("DEBUG: datetime imported")
-
 from contextlib import asynccontextmanager
-print("DEBUG: asynccontextmanager imported")
 
-# Configure logging EARLY
-logging.basicConfig(level=logging.DEBUG)
+# Configure logging based on environment
+log_level = logging.DEBUG if os.getenv("PYTHON_ENV") != "production" else logging.INFO
+logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-print("DEBUG: logging configured")
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, Depends, Request
-print("DEBUG: fastapi imported")
-
 from fastapi.responses import JSONResponse, RedirectResponse
-print("DEBUG: fastapi responses imported")
-
 from fastapi.middleware.cors import CORSMiddleware
-print("DEBUG: cors middleware imported")
-
 from pydantic import BaseModel
-print("DEBUG: pydantic imported")
-
-# from sqlalchemy import select
-# from sqlalchemy.ext.asyncio import AsyncSession  # Deprecated
 import httpx
-print("DEBUG: httpx imported")
-
 import websockets
-print("DEBUG: websockets imported")
-
 from dotenv import load_dotenv
-print("DEBUG: dotenv imported")
-
 import uuid
-print("DEBUG: uuid imported")
 
 # LangChain imports
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
-print("DEBUG: langchain_core imported")
-
 from langchain_core.messages import HumanMessage, AIMessage
-print("DEBUG: langchain messages imported")
-
-from dotenv import load_dotenv
-print("DEBUG: dotenv re-imported")
-
-import os
-print("DEBUG: os re-imported")
 
 # Load local .env when running outside Docker
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
-print("DEBUG: dotenv loaded")
 
-# Import Roboto SAI SDK (optional) - updated for proper package structure
+# Import Roboto SAI SDK (optional)
 try:
     from roboto_sai_sdk import RobotoSAIClient, get_xai_grok
     HAS_SDK = True
-    print("DEBUG: SDK imported successfully")
+    logger.info("Roboto SAI SDK loaded successfully")
 except ImportError as e:
-    print(f"DEBUG: SDK import failed: {e}")
-    logger.warning("roboto_sai_sdk not available, using fallback implementations")
+    logger.warning(f"roboto_sai_sdk not available: {e}")
     HAS_SDK = False
     RobotoSAIClient = None
     get_xai_grok = None
 
-print("DEBUG: Starting local module imports")
-
 # Import local modules
 from advanced_emotion_simulator import AdvancedEmotionSimulator
-print("DEBUG: AdvancedEmotionSimulator imported")
-
 from grok_llm import GrokLLM
-print("DEBUG: GrokLLM imported")
-
-# Use langchain_memory which has in-memory fallback when Supabase unavailable
 from langchain_memory import SupabaseMessageHistory
-print("DEBUG: SupabaseMessageHistory imported (with fallback support)")
-
 from utils.supabase_client import get_supabase_client
-print("DEBUG: get_supabase_client imported
-
 from db import init_db
-print("DEBUG: init_db imported")
-
-print("DEBUG: All imports completed, starting FastAPI app creation")
+from payments import router as payments_router
 
 # Global client instance
-roboto_client: Optional[Any] = None  # Optional[RobotoSAIClient]
+roboto_client: Optional[Any] = None
 xai_grok = None
 emotion_simulator: Optional[AdvancedEmotionSimulator] = None
 grok_llm = None
@@ -132,44 +70,39 @@ async def lifespan(app: FastAPI):
     """Initialize SDK on startup, cleanup on shutdown"""
     global roboto_client, xai_grok
     
-    print("DEBUG: Lifespan startup beginning...")
-    
-    logger.info("🚀 Roboto SAI 2026 Backend Starting...")
-    logger.info("📍 Phase 1: Database initialization")
+    logger.info("Roboto SAI 2026 Backend Starting...")
 
     try:
-        # Initialize database (graceful fallback if Supabase unavailable)
+        # Initialize database
         try:
             init_db()
-            logger.info("✅ Database initialized")
+            logger.info("Database initialized")
         except Exception as e:
-            logger.warning(f"⚠️ Database initialization failed (running in demo mode): {e}")
+            logger.warning(f"Database initialization failed: {e}")
 
-        logger.info("📍 Phase 2: Emotion simulator initialization")
         # Initialize emotion simulator
         state_path = os.getenv("ROBO_EMOTION_STATE_PATH", "./data/emotion_state.json")
         emotion_simulator_instance = AdvancedEmotionSimulator()
         try:
             if os.path.exists(state_path):
                 emotion_simulator_instance.load_state(state_path)
-                logger.info("✅ Emotion state loaded")
+                logger.info("Emotion state loaded")
         except Exception as e:
-            logger.warning(f"⚠️ Could not load emotion state: {e}")
+            logger.warning(f"Could not load emotion state: {e}")
 
         global emotion_simulator
         emotion_simulator = emotion_simulator_instance
 
-        logger.info("📍 Phase 3: SDK client initialization")
         # Initialize Roboto SAI Client (optional)
         if HAS_SDK and os.getenv("XAI_API_KEY"):
             try:
                 roboto_client = RobotoSAIClient()
-                logger.info(f"✅ Roboto SAI Client initialized: {roboto_client.client_id}")
+                logger.info(f"Roboto SAI Client initialized: {roboto_client.client_id}")
             except Exception as e:
-                logger.warning(f"⚠️ Failed to initialize Roboto SAI Client: {e}")
+                logger.warning(f"Failed to initialize Roboto SAI Client: {e}")
                 roboto_client = None
         else:
-            logger.warning("⚠️ SDK not available or XAI_API_KEY not set - running in degraded mode")
+            logger.warning("SDK not available or XAI_API_KEY not set")
             roboto_client = None
 
         # Initialize xAI Grok (optional)
@@ -177,32 +110,28 @@ async def lifespan(app: FastAPI):
             try:
                 xai_grok = get_xai_grok()
                 if xai_grok.available:
-                    logger.info("✅ xAI Grok SDK available - Reasoning chains active")
+                    logger.info("xAI Grok SDK available")
                 else:
-                    logger.warning("⚠️ xAI Grok not available - check XAI_API_KEY")
+                    logger.warning("xAI Grok not available - check XAI_API_KEY")
             except Exception as e:
-                logger.warning(f"⚠️ Failed to initialize xAI Grok: {e}")
+                logger.warning(f"Failed to initialize xAI Grok: {e}")
                 xai_grok = None
         else:
-            logger.warning("⚠️ SDK not available - xAI Grok not initialized")
+            logger.warning("SDK not available - xAI Grok not initialized")
         
-        logger.info("📍 Phase 4: LangChain GrokLLM initialization")
-        # Initialize LangChain GrokLLM (graceful fallback)
+        # Initialize LangChain GrokLLM
         global grok_llm
         try:
             grok_llm = GrokLLM()
-            logger.info("✅ LangChain GrokLLM initialized")
+            logger.info("LangChain GrokLLM initialized")
         except Exception as e:
-            logger.warning(f"⚠️ Could not initialize GrokLLM: {e}")
+            logger.warning(f"Could not initialize GrokLLM: {e}")
             grok_llm = None
             
-        logger.info("📍 Phase 5: Startup complete")
-        logger.info("🚀 Backend initialization complete (may be in degraded mode)")
-        logger.info(f"📊 Status: SDK={'available' if HAS_SDK else 'unavailable'}, Grok={xai_grok is not None and xai_grok.available if xai_grok else False}, GrokLLM={grok_llm is not None}")
+        logger.info("Backend initialization complete")
+        logger.info(f"Status: SDK={'available' if HAS_SDK else 'unavailable'}, Grok={xai_grok is not None and xai_grok.available if xai_grok else False}, GrokLLM={grok_llm is not None}")
     except Exception as e:
-        logger.error(f"🚨 Unexpected backend initialization error: {e}")
-        # Still allow the app to start - don't crash
-        logger.info("Starting app in minimal/demo mode...")
+        logger.error(f"Unexpected backend initialization error: {e}")
         import traceback
         traceback.print_exc()
     
@@ -212,34 +141,19 @@ async def lifespan(app: FastAPI):
         state_path = os.getenv("ROBO_EMOTION_STATE_PATH", "./data/emotion_state.json")
         emotion_simulator.save_state(state_path)
     
-    logger.info("🛑 Roboto SAI 2026 Backend Shutting Down...")
+    logger.info("Roboto SAI 2026 Backend Shutting Down...")
 
 # Initialize FastAPI app
-try:
-    print("DEBUG: Creating FastAPI app...")
-    app = FastAPI(
-        title="Roboto SAI 2026 API",
-        description="🚀 Quantum-Entangled AI Backend for RVM Empire",
-        version="0.1.0",
-        lifespan=lifespan
-    )
-    print("DEBUG: FastAPI app created successfully")
-except Exception as e:
-    print(f"CRITICAL: FastAPI app creation failed: {e}")
-    import traceback
-    traceback.print_exc()
-    raise
+app = FastAPI(
+    title="Roboto SAI 2026 API",
+    description="Production AI Backend for Roboto SAI",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 @app.on_event("startup")
-async def startup_debug():
-    logger.debug("Startup event triggered - beginning initialization")
-    try:
-        logger.debug("Startup logic will be handled by lifespan context manager")
-        logger.debug("Startup event completed successfully")
-    except Exception as e:
-        logger.exception(f"Startup failure: {e}")
-        raise  # let it crash so Render logs it
-    logger.debug("Startup event completed successfully")
+async def startup_event():
+    logger.info("Startup event triggered")
 
 
 def _get_frontend_origins() -> list[str]:
@@ -281,6 +195,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount optional routers with graceful fallback
+try:
+    from payments import router as payments_router
+    app.include_router(payments_router)
+    logger.info("Payments router mounted")
+except ImportError as e:
+    logger.warning(f"Payments router not available: {e}")
+
+try:
+    from agent_loop import router as agent_router
+    app.include_router(agent_router)
+    logger.info("Agent router mounted")
+except ImportError as e:
+    logger.warning(f"Agent router not available: {e}")
+
+try:
+    from mcp_router import router as mcp_router
+    app.include_router(mcp_router)
+    logger.info("MCP router mounted")
+except ImportError as e:
+    logger.warning(f"MCP router not available: {e}")
 
 
 # Minimal health endpoints - added early before any heavy init
@@ -570,7 +506,7 @@ class FeedbackRequest(BaseModel):
     rating: int  # 1=thumbs up, -1=thumbs down
 
 # Voice WebSocket Proxy
-@app.websocket("/api/voice", tags=["Voice"])
+@app.websocket("/api/voice")
 async def voice_proxy(websocket: WebSocket) -> None:
     """Proxy WebSocket for Grok Voice Agent API (server-side auth)."""
     await websocket.accept()

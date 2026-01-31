@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChatStore } from '@/stores/chatStore';
 import { useAuthStore } from '@/stores/authStore';
+import { UpgradeButton } from '@/components/UpgradeButton';
 
 interface ChatSidebarProps {
   isOpen: boolean;
@@ -16,10 +17,10 @@ interface ChatSidebarProps {
 }
 
 export const ChatSidebar = ({ isOpen, onClose }: ChatSidebarProps) => {
-  const { 
-    conversations, 
-    currentConversationId, 
-    createNewConversation, 
+  const {
+    conversations,
+    currentConversationId,
+    createNewConversation,
     selectConversation,
     deleteConversation,
     resetConversations
@@ -106,18 +107,16 @@ export const ChatSidebar = ({ isOpen, onClose }: ChatSidebarProps) => {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
                     onClick={() => handleSelectConversation(conversation.id)}
-                    className={`group relative p-3 rounded-lg cursor-pointer transition-all ${
-                      conversation.id === currentConversationId
-                        ? 'bg-fire/20 border border-fire/30'
-                        : 'bg-muted/30 hover:bg-muted/50 border border-transparent'
-                    }`}
+                    className={`group relative p-3 rounded-lg cursor-pointer transition-all ${conversation.id === currentConversationId
+                      ? 'bg-fire/20 border border-fire/30'
+                      : 'bg-muted/30 hover:bg-muted/50 border border-transparent'
+                      }`}
                   >
                     <div className="flex items-start gap-3">
-                      <MessageSquare className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
-                        conversation.id === currentConversationId 
-                          ? 'text-fire' 
-                          : 'text-muted-foreground'
-                      }`} />
+                      <MessageSquare className={`w-4 h-4 mt-0.5 flex-shrink-0 ${conversation.id === currentConversationId
+                        ? 'text-fire'
+                        : 'text-muted-foreground'
+                        }`} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">
                           {conversation.title}
@@ -145,6 +144,7 @@ export const ChatSidebar = ({ isOpen, onClose }: ChatSidebarProps) => {
         {/* Footer */}
         <div className="p-4 border-t border-border/50">
           <div className="flex flex-col gap-2 text-center">
+            <UpgradeButton />
             <p className="text-xs text-muted-foreground">
               Signed in as {username ?? 'Guest'}
             </p>

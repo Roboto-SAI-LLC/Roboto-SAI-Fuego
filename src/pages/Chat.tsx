@@ -8,6 +8,7 @@
 import { useRef, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChatStore, FileAttachment } from '@/stores/chatStore';
+import { useMemoryStore } from '@/stores/memoryStore';
 import { ChatMessage } from '@/components/chat/ChatMessage';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
@@ -19,6 +20,7 @@ import { Flame, Skull, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
+import { useToast } from '@/components/ui/use-toast';
 
 type ChatApiResponse = {
   response?: string;
@@ -40,23 +42,28 @@ const getApiBaseUrl = (): string => {
 };
 
 const Chat = () => {
-  const navigate = useNavigate();
-  const { userId, isLoggedIn, refreshSession } = useAuthStore();
-  const { 
-    getMessages, 
-    isLoading, 
-    ventMode, 
-    voiceMode, 
-    currentTheme, 
-    addMessage, 
-    setLoading, 
-    toggleVentMode, 
-    toggleVoiceMode,
-    getAllConversationsContext,
-    loadUserHistory,
-    userId: storeUserId
-  } = useChatStore();
-  
+const navigate = useNavigate();
+const { toast } = useToast();
+const { userId, isLoggedIn, refreshSession } = useAuthStore();
+const {
+  getMessages,
+  isLoading,
+  ventMode,
+  voiceMode,
+  currentTheme,
+  addMessage,
+  setLoading,
+  toggleVentMode,
+  toggleVoiceMode,
+  agentMode,
+  toggleAgentMode,
+  getAllConversationsContext,
+  loadUserHistory,
+  userId: storeUserId
+} = useChatStore();
+
+const { buildContextForAI, addMemory, addConversationSummary, trackEntity, isReady: memoryReady } = useMemoryStore();
+
   const messages = getMessages();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -100,11 +107,39 @@ const Chat = () => {
     }
   }, [isLoggedIn, userId, storeUserId, loadUserHistory]);
 
+  // Extract and store important information from conversations
+  const extractMemories = async (userMessage: string, assistantResponse: string, sessionId: string) => {
+    // Extract potential entities (simple pattern matching - can be enhanced)
+    const namePattern = /(?:my (?:name is|friend|brother|sister|mom|dad|wife|husband|partner|boss|colleague) (?:is )?|I'm |I am )([A-Z][a-z]+)/gi;
+    let match;
+    while ((match = namePattern.exec(userMessage)) !== null) {
+      const entityName = match[1];
+      const entityType = userMessage.toLowerCase().includes('name is') ? 'self' : 'person';
+      await trackEntity(entityName, entityType, userMessage);
+    }
+
+    // Detect preferences (simple heuristics)
+    const preferencePatterns = [
+      { pattern: /I (?:really )?(?:love|like|prefer|enjoy) (.+?)(?:\.|,|!|$)/i, type: 'likes' },
+      { pattern: /I (?:hate|dislike|don't like|can't stand) (.+?)(?:\.|,|!|$)/i, type: 'dislikes' },
+      { pattern: /I'm (?:a|an) (.+?)(?:\.|,|!|$)/i, type: 'identity' },
+    ];
+
+    for (const { pattern, type } of preferencePatterns) {
+      const prefMatch = userMessage.match(pattern);
+      if (prefMatch) {
+        await addMemory(
+          `User ${type}: ${prefMatch[1]}`,
+          'preferences',
+          1.2,
+          { source: sessionId, extractedFrom: userMessage }
+        );
+      }
+    }
+  };
+
   const handleSend = async (content: string, attachments?: FileAttachment[]) => {
-    console.log('[Chat] handleSend called', { content, isLoggedIn, userId });
-    
     if (!isLoggedIn || !userId) {
-      console.warn('[Chat] Not logged in, redirecting to /login');
       navigate('/login');
       return;
     }
@@ -112,72 +147,104 @@ const Chat = () => {
     setLoading(true);
 
     try {
-      // Add user message with attachments
       const conversationId = addMessage({ role: 'user', content, attachments });
-      console.log('[Chat] User message added', { conversationId });
-
-      let context = '';
       const sessionId = conversationId;
-      let chatUrl = '/api/chat';
-      
-      // Get context from all conversations for better responses
-      try {
-        console.log('[Chat] About to call getAllConversationsContext');
-        context = getAllConversationsContext();
-        console.log('[Chat] Context retrieved, length:', context.length);
-        
-        try {
-          console.log('[Chat] About to call getApiBaseUrl');
-          const apiBaseUrl = getApiBaseUrl();
-          console.log('[Chat] API URL determined:', apiBaseUrl);
-          chatUrl = apiBaseUrl ? `${apiBaseUrl}/api/chat` : '/api/chat';
-          console.log('[Chat] API URL resolved', { apiBaseUrl, chatUrl });
-          console.log('[Chat] Context confirmed');
-        } catch (e) {
-          console.error('[Chat] Error in URL resolution:', e);
-          throw e;
-        }
-      } catch (e) {
-        console.error('[Chat] Error in context retrieval:', e);
-        throw e;
-      }
-      
+
+      // Build context from both conversation history and memory system
+      const conversationContext = getAllConversationsContext();
+      const memoryContext = memoryReady ? buildContextForAI(content) : '';
+
+      // Combine contexts intelligently
+      const combinedContext = memoryContext
+        ? `${memoryContext}\n\n## Recent Conversation\n${conversationContext}`
+        : conversationContext;
+
+      const apiBaseUrl = getApiBaseUrl();
+      const chatUrl = apiBaseUrl
+        ? `${apiBaseUrl}${agentMode ? '/api/agent/chat' : '/api/chat'}`
+        : (agentMode ? '/api/agent/chat' : '/api/chat');
+
       const payload = {
         message: content,
-        context,
+        context: combinedContext,
         session_id: sessionId,
+        user_id: userId,
       };
-      console.log('[Chat] Request payload', payload);
-      
+
       const response = await fetch(chatUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(payload),
       });
-      console.log('[Chat] Response received', { status: response.status, ok: response.ok });
-      
+
       const data = (await response.json()) as ChatApiResponse;
-      console.log('[Chat] Response data', data);
-      
+
       if (!response.ok) {
         const errorMessage = data.detail || data.error || `Request failed (${response.status})`;
-        console.error('[Chat] API error', { status: response.status, errorMessage, data });
         throw new Error(errorMessage);
       }
-      
-      console.log('[Chat] Adding assistant message', { response: data.response || data.content });
-      addMessage({ 
-        role: 'assistant', 
-        content: data.response || data.content || 'Flame response received.',
-        id: data.assistant_message_id || undefined,
-      });
-    } catch (error) {
-      console.error('[Chat] handleSend error', error);
+
+      const assistantContent = data.response || data.content || 'Flame response received.';
+
       addMessage({
         role: 'assistant',
-        content: '⚠️ **Connection to the flame matrix interrupted.** The eternal fire flickers but does not die. Please try again.',
+        content: assistantContent,
+        id: data.assistant_message_id || undefined,
       });
+
+      // Extract and store memories from this exchange
+      if (memoryReady) {
+        await extractMemories(content, assistantContent, sessionId);
+      }
+    } catch (error) {
+      console.error('[Chat] handleSend error', error);
+      
+      // Show specific error based on the error type
+      const errorMessage = error instanceof Error ? error.message : 'Connection error';
+      
+      // Parse error message to provide better feedback
+      let title = "Connection Error";
+      let description = "The eternal fire flickers but does not die. Please try again.";
+      
+      if (errorMessage.includes('404') || errorMessage.includes('Not Found')) {
+        title = "API Endpoint Not Found";
+        description = "The chat endpoint is not available. Grok API may be unavailable. Check your deployment configuration.";
+      } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        title = "Authentication Required";
+        description = "Your session has expired. Please log in again.";
+        // Redirect to login after showing error
+        setTimeout(() => navigate('/login'), 2000);
+      } else if (errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+        title = "Access Denied";
+        description = "You don't have permission to access this resource.";
+      } else if (errorMessage.includes('503') || errorMessage.includes('Service Unavailable')) {
+        title = "Service Temporarily Unavailable";
+        description = "Grok API is currently unavailable. This may be due to rate limits or API access issues. Try again in a moment.";
+      } else if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
+        title = "Request Timeout";
+        description = "The request took too long. Please check your internet connection and try again.";
+      } else if (errorMessage.includes('network') || errorMessage.includes('Failed to fetch')) {
+        title = "Network Error";
+        description = "Cannot connect to the server. Please check your internet connection.";
+      } else if (errorMessage.includes('Could not connect to Grok API')) {
+        title = "Grok API Unavailable";
+        description = "The AI service is currently unavailable. The backend may need configuration or Grok API access.";
+      } else if (errorMessage.length > 0 && errorMessage !== 'Connection error') {
+        // Show the actual error message if it's specific
+        description = errorMessage;
+      }
+      
+      toast({
+        variant: "destructive",
+        title,
+        description,
+      });
+      
+      // Remove the user message that failed to send (optional - keeps history clean)
+      // Note: You might want to keep the user's message, so commenting this out
+      // If you want to remove it, uncomment the line below:
+      // useChatStore.getState().removeLastMessage();
     } finally {
       setLoading(false);
     }
@@ -227,11 +294,10 @@ const Chat = () => {
                 animate={{ opacity: 1, y: 0 }}
                 className="text-center py-20"
               >
-                <div className={`inline-flex items-center justify-center w-24 h-24 rounded-full mb-6 ${
-                  ventMode 
-                    ? 'bg-blood/20 border border-blood/30' 
-                    : 'bg-gradient-to-br from-fire/20 to-blood/20 border border-fire/30 animate-pulse-fire'
-                }`}>
+                <div className={`inline-flex items-center justify-center w-24 h-24 rounded-full mb-6 ${ventMode
+                  ? 'bg-blood/20 border border-blood/30'
+                  : 'bg-gradient-to-br from-fire/20 to-blood/20 border border-fire/30 animate-pulse-fire'
+                  }`}>
                   {ventMode ? (
                     <Skull className="w-12 h-12 text-blood" />
                   ) : (
@@ -242,7 +308,7 @@ const Chat = () => {
                   {ventMode ? 'VENT MODE ACTIVE' : 'Welcome to Roboto SAI'}
                 </h2>
                 <p className="text-muted-foreground max-w-md mx-auto mb-2">
-                  {ventMode 
+                  {ventMode
                     ? 'The rage flows through the circuits. Speak your fury.'
                     : 'The eternal flame awaits your words. Speak, and the Regio-Aztec genome shall respond.'
                   }
@@ -280,6 +346,8 @@ const Chat = () => {
           onVentToggle={toggleVentMode}
           voiceMode={voiceMode}
           onVoiceToggle={toggleVoiceMode}
+          agentMode={agentMode}
+          onAgentToggle={toggleAgentMode}
         />
       </main>
 

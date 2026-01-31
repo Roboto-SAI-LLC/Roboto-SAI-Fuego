@@ -8,7 +8,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, Volume2, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
+import { useToast } from '@/components/ui/use-toast';
 
 interface VoiceModeProps {
   isActive: boolean;
@@ -29,11 +29,14 @@ const getVoiceWsUrl = (): string => {
 };
 
 export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: VoiceModeProps) => {
-  const [status, setStatus] = useState<ConnectionStatus>('disconnected');
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [transcript, setTranscript] = useState('');
+const { toast } = useToast();
+const [status, setStatus] = useState<ConnectionStatus>('disconnected');
+const [isSpeaking, setIsSpeaking] = useState(false);
+const [isListening, setIsListening] = useState(false);
+const [isMuted, setIsMuted] = useState(false);
+const [transcript, setTranscript] = useState('');
+
+  const isMutedRef = useRef(isMuted);
   
   const wsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -52,6 +55,10 @@ export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: Voi
   useEffect(() => {
     systemPromptRef.current = systemPrompt;
   }, [systemPrompt]);
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
 
   // Audio playback queue
   const playNextAudio = useCallback(async () => {
@@ -133,7 +140,7 @@ export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: Voi
     return wavArray;
   };
 
-  const encodeAudioForAPI = (float32Array: Float32Array): string => {
+  const encodeAudioForAPI = useCallback((float32Array: Float32Array): string => {
     const int16Array = new Int16Array(float32Array.length);
     for (let i = 0; i < float32Array.length; i++) {
       const s = Math.max(-1, Math.min(1, float32Array[i]));
@@ -149,9 +156,9 @@ export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: Voi
     }
     
     return btoa(binary);
-  };
+  }, []);
 
-  const startMicrophone = async () => {
+  const startMicrophone = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -176,7 +183,7 @@ export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: Voi
       const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
       
       processor.onaudioprocess = (e) => {
-        if (wsRef.current?.readyState === WebSocket.OPEN && !isMuted) {
+        if (wsRef.current?.readyState === WebSocket.OPEN && !isMutedRef.current) {
           const inputData = e.inputBuffer.getChannelData(0);
           const encoded = encodeAudioForAPI(new Float32Array(inputData));
           
@@ -194,11 +201,15 @@ export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: Voi
       setIsListening(true);
     } catch (error) {
       console.error('Error accessing microphone:', error);
-      toast.error('Failed to access microphone. Please check permissions.');
+      toast({
+        variant: "destructive",
+        title: "Microphone Access Denied",
+        description: "Please check your browser permissions and allow microphone access.",
+      });
     }
-  };
+  }, [encodeAudioForAPI, toast]);
 
-  const stopMicrophone = () => {
+  const stopMicrophone = useCallback(() => {
     if (processorRef.current) {
       processorRef.current.disconnect();
       processorRef.current = null;
@@ -208,7 +219,7 @@ export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: Voi
       streamRef.current = null;
     }
     setIsListening(false);
-  };
+  }, []);
 
   const connect = useCallback(async () => {
     setStatus('connecting');
@@ -322,7 +333,11 @@ export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: Voi
 
           case 'error':
             console.error('Voice API error:', data.error);
-            toast.error(data.error?.message || 'Voice connection error');
+            toast({
+              variant: "destructive",
+              title: "Voice Connection Error",
+              description: data.error?.message || "The voice connection encountered an error. Please try again.",
+            });
             break;
         }
       };
@@ -330,7 +345,11 @@ export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: Voi
       ws.onerror = (error) => {
         console.error('Voice WebSocket error:', error);
         setStatus('error');
-        toast.error('Voice connection failed. Make sure XAI_API_KEY is configured.');
+        toast({
+          variant: "destructive",
+          title: "Voice Connection Failed",
+          description: "Voice mode is currently unavailable. This feature requires backend voice support. Try regular chat instead.",
+        });
       };
 
       ws.onclose = (event: CloseEvent) => {
@@ -341,15 +360,28 @@ export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: Voi
         });
         setStatus('disconnected');
         stopMicrophone();
+        
+        // Only show error toast if it wasn't a clean close
+        if (!event.wasClean && event.code !== 1000) {
+          toast({
+            variant: "destructive",
+            title: "Voice Connection Lost",
+            description: "The voice connection was interrupted. Please try again.",
+          });
+        }
       };
 
       wsRef.current = ws;
     } catch (error) {
       console.error('Failed to connect:', error);
       setStatus('error');
-      toast.error('Failed to start voice mode');
+      toast({
+        variant: "destructive",
+        title: "Voice Mode Unavailable",
+        description: "Could not start voice mode. This feature requires backend support. Use regular chat instead.",
+      });
     }
-  }, [playNextAudio]);
+  }, [playNextAudio, startMicrophone, stopMicrophone, toast]);
 
   const disconnect = useCallback(() => {
     if (wsRef.current) {
@@ -366,7 +398,7 @@ export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: Voi
     setStatus('disconnected');
     setIsSpeaking(false);
     setTranscript('');
-  }, []);
+  }, [stopMicrophone]);
 
   useEffect(() => {
     if (isActive) {

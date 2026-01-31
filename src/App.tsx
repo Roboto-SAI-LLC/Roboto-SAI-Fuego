@@ -16,31 +16,32 @@ import Legacy from "./pages/Legacy";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import KnowledgeBase from "./pages/KnowledgeBase";
+import MCPPage from "./pages/MCP";
+import Settings from "./pages/Settings";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuthStore } from "@/stores/authStore";
+import { useMemoryStore } from "@/stores/memoryStore";
 
 const queryClient = new QueryClient();
 
-const isGitHubPagesHost = () => {
-  if (globalThis.window === undefined) return false;
-  const allowedGitHubPagesHosts = [
-    "robotosai.github.io",
-  ];
-  const hostname = globalThis.window.location.hostname;
-  return allowedGitHubPagesHosts.includes(hostname);
-};
-
-// Force rebuild
 const Router = HashRouter;
 
 const App = () => {
-  console.log('App loaded');
   const refreshSession = useAuthStore((state) => state.refreshSession);
+  const userId = useAuthStore((state) => state.userId);
+  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+  const loadUserMemories = useMemoryStore((state) => state.loadUserMemories);
 
   useEffect(() => {
     void refreshSession();
   }, [refreshSession]);
+
+  // Load user memories when logged in
+  useEffect(() => {
+    if (isLoggedIn && userId) {
+      void loadUserMemories(userId);
+    }
+  }, [isLoggedIn, userId, loadUserMemories]);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -52,7 +53,6 @@ const App = () => {
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/knowledge" element={<KnowledgeBase />} />
             <Route path="/chat" element={
               <RequireAuth>
                 <Chat />
@@ -61,6 +61,16 @@ const App = () => {
             <Route path="/legacy" element={
               <RequireAuth>
                 <Legacy />
+              </RequireAuth>
+            } />
+            <Route path="/mcp" element={
+              <RequireAuth>
+                <MCPPage />
+              </RequireAuth>
+            } />
+            <Route path="/settings" element={
+              <RequireAuth>
+                <Settings />
               </RequireAuth>
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
