@@ -15,6 +15,7 @@ from collections import deque
 from functools import lru_cache
 from datetime import date
 from typing import Dict, List, Optional, Tuple, Union, Any
+import asyncio
 
 # Optional imports for quantum/cultural/voice
 try:
@@ -302,6 +303,16 @@ class AdvancedEmotionSimulator:
         except Exception as e:
             logger.error(f"Error in emotion simulation: {e}")
             return "curious"  # Safe fallback
+
+    def safe_simulate_emotion(self, *args, **kwargs):
+        """Executor-isolated emotion sim - prevents nested event loop errors."""
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return self.simulate_emotion(*args, **kwargs)
+        finally:
+            loop.close()
 
     def get_current_emotion(self) -> Optional[str]:
         """Get the current simulated emotion."""

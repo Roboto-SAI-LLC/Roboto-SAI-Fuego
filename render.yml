@@ -2,19 +2,29 @@ services:
   - type: web
     name: roboto-sai
     runtime: docker
-    plan: starter
+    plan: free
     dockerfilePath: ./Dockerfile
     dockerContext: .
     envVars:
+      - key: VITE_API_BASE_URL
+        value: https://roboto-sai-backend.onrender.com
       - key: VITE_API_URL
         value: https://roboto-sai-backend.onrender.com
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
 
   - type: web
     name: roboto-sai-backend
     runtime: docker
     plan: starter
     dockerfilePath: ./backend/Dockerfile
-    dockerContext: .
+    dockerContext: ./backend
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: XAI_API_KEY
         sync: false
@@ -34,5 +44,11 @@ services:
         value: production
       - key: ROBO_EMOTION_STATE_PATH
         value: /var/data/emotion_state.json
+      - key: PYTHONPATH
+        value: "/app"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: "none"
     healthCheckPath: /api/health
     healthCheckStartupFailureThreshold: 10

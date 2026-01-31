@@ -69,6 +69,24 @@ class GrokLLM(LLM):
         """
         Synchronous call to Grok.
         """
+        # Check if we're already in an async context
+        try:
+            loop = asyncio.get_running_loop()
+            logger.warning("Nested async detected in _call(), delegating to executor")
+            # Delegate to executor (isolates new loop)
+            def safe_acall():
+                sub_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(sub_loop)
+                try:
+                    return sub_loop.run_until_complete(self._acall(prompt, stop, run_manager, **kwargs))
+                finally:
+                    sub_loop.close()
+            return asyncio.get_event_loop().run_in_executor(None, safe_acall())
+        except RuntimeError as e:
+            if "no running event loop" not in str(e).lower():
+                raise
+        
+        # No running loop - safe to create new one
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(self._acall(prompt, stop, run_manager, **kwargs))
@@ -205,7 +223,7 @@ class GrokLLM(LLM):
         messages.append({"role": "user", "content": user_message})
         
         payload = {
-            "model": os.getenv("XAI_MODEL", "grok-beta"),
+            "model": os.getenv("XAI_MODEL", "grok-4-1-fast-reasoning"),
             "messages": messages,
             "stream": False,
             "temperature": 0.7,
@@ -282,14 +300,14 @@ class GrokLLM(LLM):
                 # Try Anthropic-style format for /v1/messages
                 if url.endswith("/messages"):
                     payload = {
-                        "model": os.getenv("XAI_MODEL", "grok-beta"),
+                        "model": os.getenv("XAI_MODEL", "grok-4-1-fast-reasoning"),
                         "messages": [{"role": "user", "content": user_message}],
                         "system": roboto_context or "You are Roboto SAI.",
                         "max_tokens": 1024,
                     }
                 else:
                     payload = {
-                        "model": os.getenv("XAI_MODEL", "grok-beta"),
+                        "model": os.getenv("XAI_MODEL", "grok-4-1-fast-reasoning"),
                         "messages": [
                             {"role": "system", "content": roboto_context or "You are Roboto SAI."},
                             {"role": "user", "content": user_message}

@@ -51,8 +51,8 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 FROM base AS build
 
 # Accept build arguments for environment variables
-ARG VITE_API_BASE_URL
-ARG VITE_API_URL
+ARG VITE_API_BASE_URL=https://roboto-sai-backend.onrender.com
+ARG VITE_API_URL=https://roboto-sai-backend.onrender.com
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
 

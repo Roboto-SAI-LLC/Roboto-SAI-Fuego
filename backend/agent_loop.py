@@ -22,9 +22,11 @@ from langchain_community.chat_models import ChatOpenAI
 # If Grok is not standard OpenAI compatible, we might need custom adapter. 
 # As per grok_llm.py, there is a custom GrokLLM.
 
+logger = logging.getLogger(__name__)
+
 try:
-    from self_code_modification import SelfCodeModificationEngine, ModificationConfig
-    from grok_llm import GrokLLM
+    from .self_code_modification import SelfCodeModificationEngine, ModificationConfig
+    from .grok_llm import GrokLLM
     HAS_MODULES = True
 except ImportError as e:
     logger.warning(f"Failed to import modules: {e}")
@@ -32,8 +34,6 @@ except ImportError as e:
     SelfCodeModificationEngine = None
     ModificationConfig = None
     GrokLLM = None
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

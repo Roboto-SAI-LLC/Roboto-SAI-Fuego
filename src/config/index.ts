@@ -7,7 +7,7 @@
 
 export const config = {
   // API Configuration - Connect to your Python backend
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000',
   
   // Grok/xAI API Configuration
   grokApiUrl: import.meta.env.VITE_GROK_API_URL || 'https://api.x.ai/v1',

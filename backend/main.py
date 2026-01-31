@@ -50,12 +50,12 @@ except ImportError as e:
     get_xai_grok = None
 
 # Import local modules
-from advanced_emotion_simulator import AdvancedEmotionSimulator
-from grok_llm import GrokLLM
-from langchain_memory import SupabaseMessageHistory
-from utils.supabase_client import get_supabase_client
-from db import init_db
-from payments import router as payments_router
+from .advanced_emotion_simulator import AdvancedEmotionSimulator
+from .grok_llm import GrokLLM
+from .langchain_memory import SupabaseMessageHistory
+from .utils.supabase_client import get_supabase_client
+from .db import init_db
+from .payments import router as payments_router
 
 # Global client instance
 roboto_client: Optional[Any] = None
@@ -205,14 +205,14 @@ except ImportError as e:
     logger.warning(f"Payments router not available: {e}")
 
 try:
-    from agent_loop import router as agent_router
+    from .agent_loop import router as agent_router
     app.include_router(agent_router)
     logger.info("Agent router mounted")
 except ImportError as e:
     logger.warning(f"Agent router not available: {e}")
 
 try:
-    from mcp_router import router as mcp_router
+    from .mcp_router import router as mcp_router
     app.include_router(mcp_router)
     logger.info("MCP router mounted")
 except ImportError as e:
@@ -271,9 +271,9 @@ def _cookie_samesite() -> str:
 
 def _cookie_domain(request: Request) -> Optional[str]:
     """Return cookie domain based on environment."""
-    # For localhost, return None (browser uses current domain)
+    # For localhost, return 'localhost' to allow cookie sharing between ports
     if request.url.hostname in ("localhost", "127.0.0.1"):
-        return None
+        return "localhost"
     # For other deployments, can add custom logic
     env_domain = os.getenv("COOKIE_DOMAIN")
     return env_domain if env_domain else None
@@ -651,7 +651,7 @@ async def chat_with_grok(
         # Load conversation history (may work even without Supabase)
         try:
             history_store = SupabaseMessageHistory(session_id=session_id, user_id=user["id"])
-            history_messages = await history_store._get_messages_async()
+            history_messages = await history_store.aget_messages()
         except Exception as history_error:
             logger.warning(f"Failed to load history in demo mode: {history_error}")
             history_store = None
@@ -660,7 +660,7 @@ async def chat_with_grok(
         # Simulate emotion analysis
         if emotion_simulator:
             try:
-                emotion_text = emotion_simulator.simulate_emotion(
+                emotion_text = emotion_simulator.safe_simulate_emotion(
                     event=request.message,
                     intensity=5,
                     blend_threshold=0.8,
@@ -677,7 +677,7 @@ async def chat_with_grok(
                 
                 # Generate assistant emotion based on simulated response
                 demo_response = f"I understand you're feeling {emotion_text.lower()}. The eternal flame burns brightly. How can I assist you in your quest?"
-                assistant_emotion_text = emotion_simulator.simulate_emotion(
+                assistant_emotion_text = emotion_simulator.safe_simulate_emotion(
                     event=demo_response,
                     intensity=5,
                     blend_threshold=0.8,
@@ -740,7 +740,7 @@ async def chat_with_grok(
         # Compute user emotion
         if emotion_simulator:
             try:
-                emotion_text = emotion_simulator.simulate_emotion(
+                emotion_text = emotion_simulator.safe_simulate_emotion(
                     event=request.message,
                     intensity=5,
                     blend_threshold=0.8,
@@ -760,7 +760,7 @@ async def chat_with_grok(
         # Load conversation history with graceful fallback
         try:
             history_store = SupabaseMessageHistory(session_id=session_id, user_id=user["id"])
-            history_messages = await history_store._get_messages_async()
+            history_messages = await history_store.aget_messages()
         except Exception as history_error:
             logger.warning(f"Failed to load history (using empty): {history_error}")
             history_store = None
@@ -791,7 +791,7 @@ async def chat_with_grok(
         # Compute assistant emotion
         if emotion_simulator and response_text:
             try:
-                assistant_emotion_text = emotion_simulator.simulate_emotion(
+                assistant_emotion_text = emotion_simulator.safe_simulate_emotion(
                     event=response_text,
                     intensity=5,
                     blend_threshold=0.8,

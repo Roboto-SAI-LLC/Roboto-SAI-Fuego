@@ -62,7 +62,7 @@ if _get_persistent_store:
     except Exception:
         PERSISTENT_STORE = None
 try:
-    from utils.fingerprint import generate_fingerprint
+    from .utils.fingerprint import generate_fingerprint
 except Exception:
     generate_fingerprint = None
 
@@ -2694,7 +2694,7 @@ try:
         def __init__(self, session_id: str, user_id: str, **kwargs):
             """Initialize with session_id and user_id for chat history."""
             # Get Supabase client - assume it's configured globally
-            from utils.supabase_client import get_supabase_client
+            from .utils.supabase_client import get_supabase_client
             supabase_client = get_supabase_client()
 
             if supabase_client is None:

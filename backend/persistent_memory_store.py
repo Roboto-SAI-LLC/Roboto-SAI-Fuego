@@ -11,7 +11,7 @@ import sqlite3
 from pathlib import Path
 
 try:
-    from backend.utils.fingerprint import generate_fingerprint
+    from .utils.fingerprint import generate_fingerprint
 except Exception:
     # fallback if executed as script
     from utils.fingerprint import generate_fingerprint

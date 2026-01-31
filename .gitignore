@@ -81,3 +81,7 @@ frontend_*_*.json
 
 Tasks.md
 troubleshoot
+.supabase/*
+!.supabase/migrations/**
+!.supabase/config.toml
+supabase.tar.gz
