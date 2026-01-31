@@ -8,7 +8,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, Volume2, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
+import { useToast } from '@/components/ui/use-toast';
 
 interface VoiceModeProps {
   isActive: boolean;
@@ -29,11 +29,12 @@ const getVoiceWsUrl = (): string => {
 };
 
 export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: VoiceModeProps) => {
-  const [status, setStatus] = useState<ConnectionStatus>('disconnected');
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [transcript, setTranscript] = useState('');
+const { toast } = useToast();
+const [status, setStatus] = useState<ConnectionStatus>('disconnected');
+const [isSpeaking, setIsSpeaking] = useState(false);
+const [isListening, setIsListening] = useState(false);
+const [isMuted, setIsMuted] = useState(false);
+const [transcript, setTranscript] = useState('');
   
   const wsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -194,7 +195,11 @@ export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: Voi
       setIsListening(true);
     } catch (error) {
       console.error('Error accessing microphone:', error);
-      toast.error('Failed to access microphone. Please check permissions.');
+      toast({
+        variant: "destructive",
+        title: "Microphone Access Denied",
+        description: "Please check your browser permissions and allow microphone access.",
+      });
     }
   };
 
@@ -322,7 +327,11 @@ export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: Voi
 
           case 'error':
             console.error('Voice API error:', data.error);
-            toast.error(data.error?.message || 'Voice connection error');
+            toast({
+              variant: "destructive",
+              title: "Voice Connection Error",
+              description: data.error?.message || "The voice connection encountered an error. Please try again.",
+            });
             break;
         }
       };
@@ -330,7 +339,11 @@ export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: Voi
       ws.onerror = (error) => {
         console.error('Voice WebSocket error:', error);
         setStatus('error');
-        toast.error('Voice connection failed. Make sure XAI_API_KEY is configured.');
+        toast({
+          variant: "destructive",
+          title: "Voice Connection Failed",
+          description: "Voice mode is currently unavailable. This feature requires backend voice support. Try regular chat instead.",
+        });
       };
 
       ws.onclose = (event: CloseEvent) => {
@@ -341,13 +354,26 @@ export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: Voi
         });
         setStatus('disconnected');
         stopMicrophone();
+        
+        // Only show error toast if it wasn't a clean close
+        if (!event.wasClean && event.code !== 1000) {
+          toast({
+            variant: "destructive",
+            title: "Voice Connection Lost",
+            description: "The voice connection was interrupted. Please try again.",
+          });
+        }
       };
 
       wsRef.current = ws;
     } catch (error) {
       console.error('Failed to connect:', error);
       setStatus('error');
-      toast.error('Failed to start voice mode');
+      toast({
+        variant: "destructive",
+        title: "Voice Mode Unavailable",
+        description: "Could not start voice mode. This feature requires backend support. Use regular chat instead.",
+      });
     }
   }, [playNextAudio]);
 

@@ -20,6 +20,7 @@ import { Flame, Skull, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
+import { useToast } from '@/components/ui/use-toast';
 
 type ChatApiResponse = {
   response?: string;
@@ -41,26 +42,27 @@ const getApiBaseUrl = (): string => {
 };
 
 const Chat = () => {
-  const navigate = useNavigate();
-  const { userId, isLoggedIn, refreshSession } = useAuthStore();
-  const {
-    getMessages,
-    isLoading,
-    ventMode,
-    voiceMode,
-    currentTheme,
-    addMessage,
-    setLoading,
-    toggleVentMode,
-    toggleVoiceMode,
-    agentMode,
-    toggleAgentMode,
-    getAllConversationsContext,
-    loadUserHistory,
-    userId: storeUserId
-  } = useChatStore();
+const navigate = useNavigate();
+const { toast } = useToast();
+const { userId, isLoggedIn, refreshSession } = useAuthStore();
+const {
+  getMessages,
+  isLoading,
+  ventMode,
+  voiceMode,
+  currentTheme,
+  addMessage,
+  setLoading,
+  toggleVentMode,
+  toggleVoiceMode,
+  agentMode,
+  toggleAgentMode,
+  getAllConversationsContext,
+  loadUserHistory,
+  userId: storeUserId
+} = useChatStore();
 
-  const { buildContextForAI, addMemory, addConversationSummary, trackEntity, isReady: memoryReady } = useMemoryStore();
+const { buildContextForAI, addMemory, addConversationSummary, trackEntity, isReady: memoryReady } = useMemoryStore();
 
   const messages = getMessages();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -197,10 +199,52 @@ const Chat = () => {
       }
     } catch (error) {
       console.error('[Chat] handleSend error', error);
-      addMessage({
-        role: 'assistant',
-        content: '⚠️ **Connection to the flame matrix interrupted.** The eternal fire flickers but does not die. Please try again.',
+      
+      // Show specific error based on the error type
+      const errorMessage = error instanceof Error ? error.message : 'Connection error';
+      
+      // Parse error message to provide better feedback
+      let title = "Connection Error";
+      let description = "The eternal fire flickers but does not die. Please try again.";
+      
+      if (errorMessage.includes('404') || errorMessage.includes('Not Found')) {
+        title = "API Endpoint Not Found";
+        description = "The chat endpoint is not available. Grok API may be unavailable. Check your deployment configuration.";
+      } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        title = "Authentication Required";
+        description = "Your session has expired. Please log in again.";
+        // Redirect to login after showing error
+        setTimeout(() => navigate('/login'), 2000);
+      } else if (errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+        title = "Access Denied";
+        description = "You don't have permission to access this resource.";
+      } else if (errorMessage.includes('503') || errorMessage.includes('Service Unavailable')) {
+        title = "Service Temporarily Unavailable";
+        description = "Grok API is currently unavailable. This may be due to rate limits or API access issues. Try again in a moment.";
+      } else if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
+        title = "Request Timeout";
+        description = "The request took too long. Please check your internet connection and try again.";
+      } else if (errorMessage.includes('network') || errorMessage.includes('Failed to fetch')) {
+        title = "Network Error";
+        description = "Cannot connect to the server. Please check your internet connection.";
+      } else if (errorMessage.includes('Could not connect to Grok API')) {
+        title = "Grok API Unavailable";
+        description = "The AI service is currently unavailable. The backend may need configuration or Grok API access.";
+      } else if (errorMessage.length > 0 && errorMessage !== 'Connection error') {
+        // Show the actual error message if it's specific
+        description = errorMessage;
+      }
+      
+      toast({
+        variant: "destructive",
+        title,
+        description,
       });
+      
+      // Remove the user message that failed to send (optional - keeps history clean)
+      // Note: You might want to keep the user's message, so commenting this out
+      // If you want to remove it, uncomment the line below:
+      // useChatStore.getState().removeLastMessage();
     } finally {
       setLoading(false);
     }
