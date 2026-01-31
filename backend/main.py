@@ -68,6 +68,12 @@ emotion_simulator: Optional[AdvancedEmotionSimulator] = None
 grok_llm = None
 VOICE_WS_URL = "wss://api.x.ai/v1/realtime"
 
+# Error messages (centralized)
+BACKEND_NOT_INITIALIZED = "Backend not initialized"
+EMOTION_SIMULATOR_UNAVAILABLE = "Emotion simulator not available"
+ROBO_SAI_NOT_CONFIGURED = "Roboto SAI not available: XAI_API_KEY not configured"
+GROK_NOT_AVAILABLE = "Grok not available"
+
 # Startup/Shutdown events
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -689,7 +695,7 @@ async def voice_proxy(websocket: WebSocket) -> None:
 async def get_status() -> Dict[str, Any]:
     """Get backend status and SDK capabilities"""
     if not roboto_client:
-        raise HTTPException(status_code=503, detail="Backend not initialized")
+        raise HTTPException(status_code=503, detail=BACKEND_NOT_INITIALIZED)
     
     return {
         "status": "active",
@@ -707,7 +713,7 @@ async def get_status() -> Dict[str, Any]:
 async def simulate_emotion(request: EmotionSimRequest) -> Dict[str, Any]:
     """Simulate emotion from a text event."""
     if not emotion_simulator:
-        raise HTTPException(status_code=503, detail="Emotion simulator not available")
+        raise HTTPException(status_code=503, detail=EMOTION_SIMULATOR_UNAVAILABLE)
 
     emotion_text = emotion_simulator.simulate_emotion(
         event=request.event,
@@ -731,7 +737,7 @@ async def simulate_emotion(request: EmotionSimRequest) -> Dict[str, Any]:
 async def emotion_feedback(request: EmotionFeedbackRequest) -> Dict[str, Any]:
     """Provide feedback to tune emotion weights."""
     if not emotion_simulator:
-        raise HTTPException(status_code=503, detail="Emotion simulator not available")
+        raise HTTPException(status_code=503, detail=EMOTION_SIMULATOR_UNAVAILABLE)
 
     emotion_simulator.provide_feedback(
         event=request.event,
@@ -749,7 +755,7 @@ async def emotion_feedback(request: EmotionFeedbackRequest) -> Dict[str, Any]:
 async def get_emotion_stats() -> Dict[str, Any]:
     """Get emotion simulator stats."""
     if not emotion_simulator:
-        raise HTTPException(status_code=503, detail="Emotion simulator not available")
+        raise HTTPException(status_code=503, detail=EMOTION_SIMULATOR_UNAVAILABLE)
 
     return {
         "success": True,
@@ -1270,7 +1276,7 @@ async def activate_reaper_mode(request: ReaperRequest) -> Dict[str, Any]:
         Reaper mode results with Grok analysis
     """
     if not roboto_client:
-        raise HTTPException(status_code=503, detail="Backend not initialized")
+        raise HTTPException(status_code=503, detail=BACKEND_NOT_INITIALIZED)
     
     try:
         result = roboto_client.reap_mode(request.target)
@@ -1303,7 +1309,7 @@ async def generate_code(request: CodeGenRequest) -> Dict[str, Any]:
         Generated code with metadata
     """
     if not roboto_client:
-        raise HTTPException(status_code=503, detail="Backend not initialized")
+        raise HTTPException(status_code=503, detail=BACKEND_NOT_INITIALIZED)
     
     try:
         # Add language hint if provided
@@ -1342,7 +1348,7 @@ async def analyze_problem(request: AnalysisRequest) -> Dict[str, Any]:
         Multi-layered analysis with reasoning
     """
     if not roboto_client:
-        raise HTTPException(status_code=503, detail="Backend not initialized")
+        raise HTTPException(status_code=503, detail=BACKEND_NOT_INITIALIZED)
     
     try:
         result = roboto_client.analyze_problem(request.problem, analysis_depth=request.depth)
@@ -1364,7 +1370,7 @@ async def analyze_problem(request: AnalysisRequest) -> Dict[str, Any]:
 async def store_essence(request: EssenceData) -> Dict[str, Any]:
     """Store RVM essence in quantum-corrected memory"""
     if not roboto_client:
-        raise HTTPException(status_code=503, detail="Backend not initialized")
+        raise HTTPException(status_code=503, detail=BACKEND_NOT_INITIALIZED)
     
     try:
         success = roboto_client.store_essence(request.data, request.category)
@@ -1383,7 +1389,7 @@ async def store_essence(request: EssenceData) -> Dict[str, Any]:
 async def retrieve_essence(category: str = "general", limit: int = 10) -> Dict[str, Any]:
     """Retrieve stored RVM essence"""
     if not roboto_client:
-        raise HTTPException(status_code=503, detail="Backend not initialized")
+        raise HTTPException(status_code=503, detail=BACKEND_NOT_INITIALIZED)
     
     try:
         essence_entries = roboto_client.retrieve_essence(category, limit)
@@ -1404,7 +1410,7 @@ async def retrieve_essence(category: str = "general", limit: int = 10) -> Dict[s
 async def trigger_hyperspeed_evolution(target: str = "general") -> Dict[str, Any]:
     """Trigger hyperspeed evolution mode"""
     if not roboto_client:
-        raise HTTPException(status_code=503, detail="Backend not initialized")
+        raise HTTPException(status_code=503, detail=BACKEND_NOT_INITIALIZED)
     
     try:
         result = roboto_client.hyperspeed_evolution(target)
