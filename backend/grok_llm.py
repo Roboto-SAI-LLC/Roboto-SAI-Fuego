@@ -171,20 +171,29 @@ class GrokLLM(LLM):
         import httpx
         
         api_key = os.getenv("XAI_API_KEY")
+        
+        # xAI Grok uses OpenAI-compatible endpoint
         url = "https://api.x.ai/v1/chat/completions"
         
         # Build messages
         messages = []
         if roboto_context:
-            messages.append({"role": "system", "content": f"You are Roboto SAI. Context: {roboto_context}"})
+            messages.append({
+                "role": "system", 
+                "content": f"You are Roboto SAI, an AI companion created by Roberto Villarreal Martinez. Context: {roboto_context}"
+            })
         else:
-            messages.append({"role": "system", "content": "You are Roboto SAI, an AI companion powered by Grok."})
+            messages.append({
+                "role": "system", 
+                "content": "You are Roboto SAI, an AI companion powered by Grok, created by Roberto Villarreal Martinez."
+            })
         
         messages.append({"role": "user", "content": user_message})
         
         payload = {
             "model": "grok-beta",
             "messages": messages,
+            "stream": False,
             "temperature": 0.7,
         }
         
@@ -194,28 +203,128 @@ class GrokLLM(LLM):
         }
         
         try:
-            with httpx.Client(timeout=30.0) as client:
+            logger.info(f"Calling Grok API: {url}")
+            with httpx.Client(timeout=60.0) as client:
                 response = client.post(url, json=payload, headers=headers)
+                
+                # Log response for debugging
+                logger.info(f"Grok API response status: {response.status_code}")
+                
+                if response.status_code == 404:
+                    # Try alternate endpoint structure
+                    logger.warning("404 on standard endpoint, trying alternate...")
+                    return self._try_alternate_grok_endpoint(user_message, roboto_context, api_key)
+                
                 response.raise_for_status()
                 
                 data = response.json()
-                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                logger.debug(f"Grok API response: {data}")
                 
-                if content:
-                    return {
-                        "success": True,
-                        "response": content,
-                        "response_id": data.get("id"),
+                # Extract content from response
+                choices = data.get("choices", [])
+                if choices:
+                    content = choices[0].get("message", {}).get("content", "")
+                    if content:
+                        return {
+                            "success": True,
+                            "response": content,
+                            "response_id": data.get("id"),
+                        }
+                
+                return {"success": False, "error": "Empty response from Grok API"}
+                    
+        except httpx.HTTPStatusError as e:
+            error_detail = ""
+            try:
+                error_detail = e.response.json()
+            except:
+                error_detail = e.response.text
+            
+            logger.error(f"Grok API HTTP error {e.response.status_code}: {error_detail}")
+            return {"success": False, "error": f"Grok API HTTP error: {e.response.status_code} - {error_detail}"}
+        except httpx.HTTPError as e:
+            logger.error(f"Grok API connection error: {e}")
+            return {"success": False, "error": f"Grok API connection error: {str(e)}"}
+        except Exception as e:
+            logger.error(f"Grok API unexpected error: {e}", exc_info=True)
+            return {"success": False, "error": f"Failed to call Grok API: {str(e)}"}
+    
+    def _try_alternate_grok_endpoint(
+        self,
+        user_message: str,
+        roboto_context: Optional[str],
+        api_key: str
+    ) -> Dict[str, Any]:
+        """Try alternate Grok API endpoint structures"""
+        import httpx
+        
+        # Try v1/messages endpoint (Anthropic-style)
+        alternate_urls = [
+            "https://api.x.ai/v1/messages",
+            "https://api.x.ai/chat/completions",
+        ]
+        
+        for url in alternate_urls:
+            try:
+                logger.info(f"Trying alternate endpoint: {url}")
+                
+                # Try Anthropic-style format for /v1/messages
+                if "messages" in url:
+                    payload = {
+                        "model": "grok-beta",
+                        "messages": [{"role": "user", "content": user_message}],
+                        "system": roboto_context or "You are Roboto SAI.",
+                        "max_tokens": 1024,
                     }
                 else:
-                    return {"success": False, "error": "Empty response from Grok API"}
+                    payload = {
+                        "model": "grok-beta",
+                        "messages": [
+                            {"role": "system", "content": roboto_context or "You are Roboto SAI."},
+                            {"role": "user", "content": user_message}
+                        ],
+                        "stream": False,
+                    }
+                
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "anthropic-version": "2023-06-01",  # Try with Anthropic header
+                }
+                
+                with httpx.Client(timeout=60.0) as client:
+                    response = client.post(url, json=payload, headers=headers)
                     
-        except httpx.HTTPError as e:
-            logger.error(f"Grok API HTTP error: {e}")
-            return {"success": False, "error": f"Grok API error: {str(e)}"}
-        except Exception as e:
-            logger.error(f"Grok API error: {e}")
-            return {"success": False, "error": f"Failed to call Grok API: {str(e)}"}
+                    if response.status_code == 200:
+                        logger.info(f"Success with alternate endpoint: {url}")
+                        data = response.json()
+                        
+                        # Handle different response formats
+                        content = None
+                        if "choices" in data:
+                            content = data["choices"][0].get("message", {}).get("content")
+                        elif "content" in data:
+                            if isinstance(data["content"], list):
+                                content = data["content"][0].get("text")
+                            else:
+                                content = data["content"]
+                        
+                        if content:
+                            return {
+                                "success": True,
+                                "response": content,
+                                "response_id": data.get("id"),
+                            }
+                    
+            except Exception as e:
+                logger.debug(f"Alternate endpoint {url} failed: {e}")
+                continue
+        
+        # All endpoints failed
+        return {
+            "success": False, 
+            "error": "Could not connect to Grok API. Please verify your XAI_API_KEY is valid and has access to the Grok API. Visit https://console.x.ai for API documentation."
+        }
 
     def _build_from_messages(self, messages: List[BaseMessage]) -> tuple[str, str, Optional[str]]:
         context_parts = []
