@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean
 
 # Copy requirements first (constraints.txt is optional)
-COPY backend/requirements.txt ./
+COPY requirements.txt ./
 
 # Install dependencies (without constraints if not needed)
 RUN pip install --no-cache-dir --upgrade pip && \
