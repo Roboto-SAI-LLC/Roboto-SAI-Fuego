@@ -59,8 +59,8 @@ def clean_input(text: str) -> str:
     if not text:
         return ""
     try:
-        # Allow only safe tags and attributes
-        return bleach.clean(text, strip=True)
+        # Allow only safe tags and attributes (empty list = remove all tags)
+        return bleach.clean(text, tags=[], strip=True)
     except Exception as e:
         logger.error(f"Error sanitizing input: {e}")
         # Fail safe: return empty string or original if critical
