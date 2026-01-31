@@ -38,4 +38,4 @@ EXPOSE 5000
 USER roboto
 
 # Start with uvicorn using Render's PORT variable
-CMD python -m uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-5000} --log-level info
+CMD python -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-5000} --log-level info
