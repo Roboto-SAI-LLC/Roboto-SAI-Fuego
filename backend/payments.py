@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Header, Request, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
-from .utils.supabase_client import get_supabase_client
+from utils.supabase_client import get_supabase_client
 from supabase import create_client, Client
 
 def get_service_client() -> Optional[Client]:
