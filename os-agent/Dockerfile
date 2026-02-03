@@ -20,6 +20,10 @@ WORKDIR /app/browser-server
 RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
 RUN npm install -g playwright@1.58.0 && playwright install chromium
 
+# Copy MCP servers Python modules to PYTHONPATH location
+WORKDIR /app
+COPY mcp-servers/mcp_servers/ ./mcp_servers/
+
 # Now OS Agent
 WORKDIR /app
 COPY os-agent/package*.json ./

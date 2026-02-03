@@ -39,6 +39,10 @@ except ImportError:
 # Import modular API router
 from api import router as api_router
 
+# Initialize quantum and evolution kernels
+from services.quantum_engine import initialize_quantum_kernel
+from services.evolution_engine import initialize_evolution_kernel
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,6 +51,17 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan management"""
     logger.info("🚀 Starting Roboto SAI 2026 Modular Backend...")
+    
+    # Initialize quantum kernel
+    logger.info("🔬 Initializing quantum kernel...")
+    quantum_kernel = initialize_quantum_kernel()
+    logger.info("✅ Quantum kernel initialized")
+    
+    # Initialize evolution kernel
+    logger.info("🧬 Initializing evolution kernel...")
+    evolution_kernel = initialize_evolution_kernel()
+    logger.info("✅ Evolution kernel initialized")
+    
     yield
     logger.info("🛑 Shutting down Roboto SAI 2026 Modular Backend...")
 

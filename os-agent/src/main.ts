@@ -43,7 +43,7 @@ const MCP_SERVER_CONFIGS: McpServerConfig[] = [
   {
     name: 'filesystem',
     command: 'node',
-    args: ['R:/Repos/Roboto-SAI-2026/mcp-servers/fs-server/dist/index.js'],
+    args: ['/app/fs-server/dist/index.js'],
     env: {
       ALLOWED_DRIVES: 'R:,D:',
       ALLOW_READ: 'true',
@@ -53,18 +53,18 @@ const MCP_SERVER_CONFIGS: McpServerConfig[] = [
   },
   {
     name: 'browser',
-    command: 'R:/Repos/Roboto-SAI-2026/.venv/Scripts/python.exe',
+    command: 'python3',
     args: ['-m', 'mcp_servers.browser_server'],
     env: {
-      PYTHONPATH: 'R:/Repos/Roboto-SAI-2026/mcp-servers',
+      PYTHONPATH: '/app',
       BROWSER_HEADLESS: process.env.BROWSER_HEADLESS || 'true',
       BROWSER_TIMEOUT: process.env.BROWSER_TIMEOUT || '30000'
     },
-    enabled: true
+    enabled: false  // Disabled until playwright dependency is resolved
   },
   {
     name: 'twitter',
-    command: 'python',
+    command: 'python3',
     args: ['-m', 'mcp_servers.twitter_server'],
     env: {
       TWITTER_API_KEY: process.env.TWITTER_API_KEY || '',
@@ -74,7 +74,7 @@ const MCP_SERVER_CONFIGS: McpServerConfig[] = [
   },
   {
     name: 'email',
-    command: 'python',
+    command: 'python3',
     args: ['-m', 'mcp_servers.email_server'],
     env: {
       SMTP_HOST: process.env.SMTP_HOST || '',
