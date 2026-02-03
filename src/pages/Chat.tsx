@@ -27,7 +27,7 @@ type ChatApiResponse = {
   content?: string;
   error?: string;
   detail?: string;
-  assistant_message_id?: string;
+  roboto_message_id?: string;
   user_message_id?: string;
 };
 
@@ -108,7 +108,7 @@ const { buildContextForAI, addMemory, addConversationSummary, trackEntity, isRea
   }, [isLoggedIn, userId, storeUserId, loadUserHistory]);
 
   // Extract and store important information from conversations
-  const extractMemories = async (userMessage: string, assistantResponse: string, sessionId: string) => {
+  const extractMemories = async (userMessage: string, robotoResponse: string, sessionId: string) => {
     // Extract potential entities (simple pattern matching - can be enhanced)
     const namePattern = /(?:my (?:name is|friend|brother|sister|mom|dad|wife|husband|partner|boss|colleague) (?:is )?|I'm |I am )([A-Z][a-z]+)/gi;
     let match;
@@ -194,17 +194,17 @@ const { buildContextForAI, addMemory, addConversationSummary, trackEntity, isRea
         throw new Error(errorMessage);
       }
 
-      const assistantContent = data.response || data.content || 'Flame response received.';
+      const robotoContent = data.response || data.content || 'Flame response received.';
 
       addMessage({
-        role: 'assistant',
-        content: assistantContent,
-        id: data.assistant_message_id || undefined,
+        role: 'roboto',
+        content: robotoContent,
+        id: data.roboto_message_id || undefined,
       });
 
       // Extract and store memories from this exchange
       if (memoryReady) {
-        await extractMemories(content, assistantContent, sessionId);
+        await extractMemories(content, robotoContent, sessionId);
       }
     } catch (error) {
       console.error('[Chat] handleSend error', error);
@@ -259,7 +259,7 @@ const { buildContextForAI, addMemory, addConversationSummary, trackEntity, isRea
     }
   };
 
-  const handleVoiceTranscript = (text: string, role: 'user' | 'assistant') => {
+  const handleVoiceTranscript = (text: string, role: 'user' | 'roboto') => {
     addMessage({ role, content: text });
   };
 

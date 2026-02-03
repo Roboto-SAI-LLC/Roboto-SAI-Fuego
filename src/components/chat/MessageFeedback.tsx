@@ -1,6 +1,6 @@
 /**
  * MessageFeedback - Thumbs up/down rating component
- * Allows users to rate assistant responses
+ * Allows users to rate roboto responses
  */
 
 import { useState } from 'react';

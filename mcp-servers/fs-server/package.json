@@ -1,0 +1,32 @@
+{
+  "name": "roboto-sai-fs-server",
+  "version": "1.0.0",
+  "description": "Filesystem MCP server for Roboto SAI - Provides file operations with Scoped Trust Model B restrictions",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "filesystem",
+    "roboto-sai",
+    "model-context-protocol"
+  ],
+  "author": "Roberto Villarreal Martinez <ytkrobthugod@hotmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "typescript": "^5.3.3",
+    "tsx": "^4.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

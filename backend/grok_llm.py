@@ -448,7 +448,7 @@ class GrokLLM(LLM):
     def _build_from_messages(self, messages: List[BaseMessage]) -> tuple[str, str, Optional[str]]:
         # Performance: Use list comprehension generator
         context_parts = (
-            f"{'User' if isinstance(msg, HumanMessage) else 'Assistant'}: {msg.content}" 
+            f"{'User' if isinstance(msg, HumanMessage) else 'Roboto'}: {msg.content}" 
             for msg in messages[:-1]
         )
         context = "\n".join(context_parts)
@@ -516,7 +516,7 @@ class GrokLLM(LLM):
             messages = prompt
             context_parts = []
             for msg in messages[:-1]:  # All except last
-                role = "User" if isinstance(msg, HumanMessage) else "Assistant"
+                role = "User" if isinstance(msg, HumanMessage) else "Roboto"
                 context_parts.append(f"{role}: {msg.content}")
             context = "\n".join(context_parts)
             last_msg = messages[-1]

@@ -43,6 +43,7 @@ __pycache__/
 venv/
 env/
 ENV/
+.venv/
 # Local virtual environments (project-specific)
 backend/venv_linux/
 backend/.venv/

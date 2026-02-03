@@ -40,7 +40,7 @@ roboto-sai-sdk (separate repo)
 | Frontend | React 18.3 + TypeScript 5.8 + Vite 7.3 + TailwindCSS 3.4 |
 | UI Components | shadcn/ui (Radix) + Framer Motion animations |
 | State | Zustand 5.0 + React Query for server sync |
-| Backend | Python 3.14 + FastAPI + Uvicorn |
+| Backend | Python 3.11 + FastAPI + Uvicorn |
 | AI/ML | xAI Grok + qiskit 2.3.0 + qutip 5.2.2 |
 | Database | MSSQL/SQLite (extensible) |
 | Deployment | Docker + docker-compose |
@@ -179,7 +179,7 @@ Backend prefers service_role; auto-fallbacks to anon on invalid.
 ├── backend/
 │   ├── main.py                 # FastAPI app + endpoints
 │   ├── requirements.txt        # Python deps (includes roboto-sai-sdk from GitHub)
-│   ├── Dockerfile             # Multi-stage: Python 3.14 + deps
+│   ├── Dockerfile             # Multi-stage: Python 3.11 + deps
 │   └── .env                   # Loaded by Docker
 ├── src/
 │   ├── pages/
@@ -215,7 +215,7 @@ Backend prefers service_role; auto-fallbacks to anon on invalid.
 # Install frontend deps
 npm install
 
-# Install backend deps (requires Python 3.14)
+# Install backend deps (requires Python 3.11)
 cd backend
 pip install -r requirements.txt
 # SDK installed from GitHub

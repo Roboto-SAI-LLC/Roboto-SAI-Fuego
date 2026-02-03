@@ -136,7 +136,7 @@ export const ChatMessage = forwardRef<HTMLDivElement, ChatMessageProps>(({ messa
           {new Date(message.timestamp).toLocaleTimeString()}
         </p>
         
-        {/* Feedback for assistant messages */}
+        {/* Feedback for roboto messages */}
         {!isUser && message.id && (
           <MessageFeedback messageId={message.id} />
         )}

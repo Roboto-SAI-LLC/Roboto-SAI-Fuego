@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean
 
 # Copy requirements first (constraints.txt is optional)
-COPY requirements.txt ./
+COPY backend/requirements.txt ./
 
 # Install dependencies (without constraints if not needed)
 RUN pip install --no-cache-dir --upgrade pip && \
@@ -24,6 +24,9 @@ RUN python -c "import roboto_sai_sdk; print('SDK integrity verified')" || echo "
 
 # Copy backend code
 COPY . /app/
+
+# Set working directory to backend
+WORKDIR /app/backend
 
 # Create data directory
 RUN mkdir -p /app/data && chown -R roboto:roboto /app
@@ -38,4 +41,4 @@ EXPOSE 5000
 USER roboto
 
 # Start with uvicorn using Render's PORT variable
-CMD python -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-5000} --log-level info
+CMD python main_modular.py
