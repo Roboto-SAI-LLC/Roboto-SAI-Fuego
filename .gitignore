@@ -39,6 +39,10 @@ backend/.mypy_cache/
 backend/.pytest_cache/
 FutureAdds/*
 
+# Python bytecode
+__pycache__/
+*.pyc
+
 # Github
 .github/*
 !.github/workflows/
@@ -75,6 +79,9 @@ frontend_*_*.json
 .Roboto
 ~
 .roboto
+secrets/*
+telegram_token.txt
+
 # Explicit ignore for local Roboto config directory placed under repo root (tilde dir)
 /~/.roboto/
 /config.json
