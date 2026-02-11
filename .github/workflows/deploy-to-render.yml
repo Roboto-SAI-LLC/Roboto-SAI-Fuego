@@ -1,0 +1,26 @@
+name: Deploy to Render (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Render Service ID (e.g., srv-d5t1miv18n1s73fv3fmg)'
+        required: false
+        default: 'srv-d5t1miv18n1s73fv3fmg'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger deploy on Render
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          SERVICE_ID: ${{ github.event.inputs.service }}
+        run: |
+          if [ -z "$RENDER_API_KEY" ]; then echo "RENDER_API_KEY secret is not set"; exit 1; fi
+          echo "Triggering Render deploy for $SERVICE_ID"
+          curl -sS -X POST "https://api.render.com/v1/services/$SERVICE_ID/deploys" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache": false}' | tee /tmp/render-deploy.json
+          echo "Response saved to /tmp/render-deploy.json"

@@ -78,8 +78,7 @@ FROM nginx:alpine AS production
 RUN apk add --no-cache \
     curl \
     gettext \
-    && rm -rf /var/cache/apk/* \
-    && chmod 777 /etc/nginx/conf.d
+    && rm -rf /var/cache/apk/*
 
 # Create nginx user and directories (skip if already exists)
 RUN addgroup -g 1000 -S nginx 2>/dev/null || true && \
@@ -91,7 +90,7 @@ COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 # Copy optimized nginx configuration template for Render (with placeholder for port)
 COPY <<'EOF' /etc/nginx/conf.d/default.conf.template
 server {
-    listen ${PORT:-10000};  # Dynamic port substitution via envsubst
+    listen $PORT;  # Dynamic port substitution via envsubst (set at runtime by entrypoint)
     server_name _;
     root /usr/share/nginx/html;
     index index.html;
@@ -148,7 +147,8 @@ EOF
 RUN echo "healthy" > /usr/share/nginx/html/health
 
 # Optimize nginx configuration
-RUN echo 'worker_processes auto; \
+RUN echo 'user nginx; \
+worker_processes auto; \
 worker_rlimit_nofile 1024; \
 events { \
     worker_connections 1024; \
@@ -169,31 +169,14 @@ http { \
 
 # Health check for Render
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:10000/health || exit 1
+    CMD /bin/sh -c 'curl -f http://localhost:${PORT:-10000}/health || exit 1' 
 
-# Create entrypoint script to substitute PORT and start nginx (as root)
-RUN echo '#!/bin/sh\n\
-set -e\n\
-\n# Substitute PORT in nginx config\n\
-envsubst < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf\n\
-\n# Start nginx\n\
-exec nginx -g "daemon off;"' > /entrypoint.sh && \
-    chmod +x /entrypoint.sh
+# Create entrypoint script to substitute PORT and start nginx (root-owned; will set default PORT and write config)
+RUN cat > /entrypoint.sh <<'EOF'\n#!/bin/sh\nset -e\n\n# Ensure PORT has a sensible default at runtime\nPORT=${PORT:-10000}\nexport PORT\n\n# Substitute PORT in nginx config (only PORT will be substituted)\nenvsubst '\$PORT' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf\n\n# Start nginx (master runs as root and workers run as nginx user via config)\nexec nginx -g "daemon off;"\nEOF\nRUN chmod 755 /entrypoint.sh && chown root:root /entrypoint.sh
 
-# Switch to non-root user for security
-USER nginx
+# Ensure entrypoint will run when the container starts
+ENTRYPOINT ["/entrypoint.sh"]
 
 EXPOSE 10000
-
-# Create entrypoint script to substitute PORT and start nginx
-RUN echo '#!/bin/sh\n\
-set -e\n\
-\n\
-# Substitute PORT in nginx config\n\
-envsubst < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf\n\
-\n\
-# Start nginx\n\
-exec nginx -g "daemon off;"' > /entrypoint.sh && \
-    chmod +x /entrypoint.sh
 
 CMD ["nginx", "-g", "daemon off;"]

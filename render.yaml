@@ -68,7 +68,8 @@ services:
       - key: NODE_ENV
         value: production
     healthCheckPath: /health
-    autoDeployTrigger: commit
+    # Switched to off (no auto-deploy) to avoid wasting limited Render build minutes while debugging
+    autoDeployTrigger: off
 
   - type: redis
     name: roboto-sai-redis
