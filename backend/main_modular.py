@@ -81,17 +81,14 @@ allowed_frontend_origins: List[str] = [origin.strip() for origin in frontend_ori
 if not allowed_frontend_origins:
     allowed_frontend_origins = ["http://localhost:8080"]
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_frontend_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["Set-Cookie"],
-)
+logger.info(f"🌐 CORS allowed origins: {allowed_frontend_origins}")
 
-# Rate limiting setup (if available)
+# ── Middleware registration ──────────────────────────────────────────
+# Starlette middleware executes in LIFO order (last added = first executed).
+# We MUST add CORSMiddleware LAST so it runs FIRST — otherwise SlowAPI
+# intercepts the browser's OPTIONS preflight and strips CORS headers.
+
+# 1. Rate limiting (added first → executes second)
 if RATE_LIMITING_AVAILABLE:
     limiter = Limiter(key_func=get_remote_address)
     app.state.limiter = limiter
@@ -100,6 +97,16 @@ if RATE_LIMITING_AVAILABLE:
     logger.info("✅ Rate limiting enabled")
 else:
     logger.warning("⚠️ Rate limiting disabled (slowapi not available)")
+
+# 2. CORS (added last → executes first, ensures preflight gets headers)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_frontend_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Set-Cookie"],
+)
 
 # Include modular API routers
 app.include_router(api_router, prefix="/api")
