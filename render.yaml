@@ -61,55 +61,12 @@ services:
         value: https://roboto-sai-backend.onrender.com
       - key: VITE_API_URL
         value: https://roboto-sai-backend.onrender.com
-      - key: VITE_OS_AGENT_URL
-        value: https://roboto-sai-os-agent.onrender.com
       - key: VITE_SUPABASE_URL
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
       - key: NODE_ENV
         value: production
-    autoDeployTrigger: commit
-
-  - type: web
-    name: roboto-sai-os-agent
-    runtime: docker
-    plan: free
-    branch: main
-    dockerfilePath: ./os-agent/Dockerfile
-    dockerContext: .
-    envVars:
-      - key: PORT
-        value: "5055"
-      - key: HOST
-        value: "0.0.0.0"
-      - key: LOG_LEVEL
-        value: "info"
-      - key: AUTO_APPROVE_LOW_RISK
-        value: "true"
-      - key: ENABLE_TWITTER
-        value: "false"
-      - key: ENABLE_EMAIL
-        value: "false"
-      - key: BROWSER_HEADLESS
-        value: "true"
-      - key: BROWSER_TIMEOUT
-        value: "30000"
-      - key: ALLOWED_ORIGINS
-        value: "https://roboto-sai.onrender.com,https://roboto-sai-backend.onrender.com,https://roboto-sai.com,https://www.roboto-sai.com"
-      - key: TWITTER_API_KEY
-        sync: false
-      - key: TWITTER_API_SECRET
-        sync: false
-      - key: SMTP_HOST
-        sync: false
-      - key: SMTP_PORT
-        sync: false
-      - key: SMTP_USER
-        sync: false
-      - key: SMTP_PASS
-        sync: false
-    healthCheckPath: /health
     autoDeployTrigger: commit
 
   - type: redis

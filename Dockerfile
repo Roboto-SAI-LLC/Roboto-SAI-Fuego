@@ -53,14 +53,12 @@ FROM base AS build
 # Accept build arguments for environment variables
 ARG VITE_API_BASE_URL=https://roboto-sai-backend.onrender.com
 ARG VITE_API_URL=https://roboto-sai-backend.onrender.com
-ARG VITE_OS_AGENT_URL=https://roboto-sai-os-agent.onrender.com
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
 
 # Set environment variables for build
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_API_URL=$VITE_API_URL
-ENV VITE_OS_AGENT_URL=$VITE_OS_AGENT_URL
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 

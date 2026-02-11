@@ -1,1 +1,0 @@
-# Browser MCP Server Package

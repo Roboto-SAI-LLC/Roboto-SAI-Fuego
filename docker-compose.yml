@@ -70,25 +70,6 @@ services:
       - prod
       - dev
 
-  # OS Agent with MCP servers
-  os-agent:
-    build:
-      context: .
-      dockerfile: os-agent/Dockerfile
-    container_name: os-agent
-    ports:
-      - "5055:5055"
-    environment:
-      - NODE_ENV=production
-    env_file:
-      - .env
-    restart: unless-stopped
-    networks:
-      - roboto-network
-    profiles:
-      - prod
-      - dev
-
 networks:
   roboto-network:
     driver: bridge

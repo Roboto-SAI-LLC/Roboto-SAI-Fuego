@@ -61,9 +61,6 @@ from utils.rate_limiter import limiter, RateLimitExceeded, _rate_limit_exceeded_
 from db import init_db
 from payments import router as payments_router
 
-# Import MCP client
-from mcp_client import perform_roaming_action
-
 # Global client instance
 roboto_client: Optional[Any] = None
 xai_grok = None
@@ -76,9 +73,6 @@ BACKEND_NOT_INITIALIZED = "Backend not initialized"
 EMOTION_SIMULATOR_UNAVAILABLE = "Emotion simulator not available"
 ROBO_SAI_NOT_CONFIGURED = "Roboto SAI not available: XAI_API_KEY not configured"
 GROK_NOT_AVAILABLE = "Grok not available"
-
-MCP_STATUS: Dict[str, str] = {}
-MCP_STATUS["TelegramLink"] = "🟢 ACTIVE (Bot deployed!)"
 
 # Startup/Shutdown events
 @asynccontextmanager
@@ -269,13 +263,6 @@ try:
     logger.info("Agent router mounted")
 except ImportError as e:
     logger.warning(f"Agent router not available: {e}")
-
-try:
-    from mcp_router import router as mcp_router
-    app.include_router(mcp_router)
-    logger.info("MCP router mounted")
-except ImportError as e:
-    logger.warning(f"MCP router not available: {e}")
 
 try:
     from voice_router import router as voice_router

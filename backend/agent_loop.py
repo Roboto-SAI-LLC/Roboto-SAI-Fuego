@@ -115,37 +115,11 @@ def modify_self_code(filename: str, changes_json: str, description: str) -> str:
     else:
         return f"Failed to modify {filename}. Check logs."
 
-# MCP Tools Loader
-def load_mcp_tools() -> List[Tool]:
-    """
-    Load tools from mcp.json configuration.
-    This is a placeholder for actual MCP client implementation.
-    Real MCP would connect to servers and discover tools.
-    """
-    tools = []
-    mcp_config_path = os.path.join(os.getcwd(), ".vscode", "mcp.json")
-    if os.path.exists(mcp_config_path):
-        try:
-            with open(mcp_config_path, 'r') as f:
-                config = json.load(f)
-                # Parse config and create tools (mocking for now as full MCP client is complex)
-                for server, details in config.get("mcpServers", {}).items():
-                    # Create a generic tool wrapper for the server
-                    # In reality we'd iterate capabilities
-                    pass
-        except Exception as e:
-            logger.error(f"Failed to load MCP config: {e}")
-    return tools
-
 # --- Agent Setup ---
 
 def get_agent_executor():
     # Load Generic Tools
     tools = [execute_local_script, modify_self_code]
-    
-    # Load MCP Tools
-    # mcp_tools = load_mcp_tools() 
-    # tools.extend(mcp_tools)
     
     # Initialize LLM (Grok or Fallback)
     # Using a placeholder for the actual agent construction

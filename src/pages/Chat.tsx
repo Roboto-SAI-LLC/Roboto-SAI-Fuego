@@ -22,10 +22,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from '@/components/ui/use-toast';
 import { useRobotoClient } from '@/hooks/useRobotoClient';
-import ChatPanel from '@/components/ChatPanel';
-import ToolApprovalModal from '@/components/ToolApprovalModal';
-import McpServerManager from '@/components/McpServerManager';
-import McpAppFrame from '@/components/McpAppFrame';
 
 type ChatApiResponse = {
   reply?: string;
@@ -61,18 +57,7 @@ const {
 const { buildContextForAI, addMemory, addConversationSummary, trackEntity, isReady: memoryReady } = useMemoryStore();
 
 const {
-  events,
-  pendingApproval,
-  servers,
-  serverError,
-  togglingServers,
-  allowedTools,
-  fetchServers,
-  toggleServer,
   sendMessage: streamMessage,
-  approveAction,
-  denyAction,
-  toggleTool
 } = useRobotoClient();
 
   const messages = getMessages();
@@ -110,10 +95,6 @@ const {
       loadUserHistory(userId);
     }
   }, [isLoggedIn, userId, storeUserId, loadUserHistory]);
-
-  useEffect(() => {
-    void fetchServers();
-  }, [fetchServers]);
 
   // Extract and store important information from conversations
   const extractMemories = async (userMessage: string, robotoResponse: string, sessionId: string) => {
@@ -225,19 +206,6 @@ const {
             if (memoryReady) {
               void extractMemories(content, robotoContent, sessionId);
             }
-          } else if (event.type === 'tool_call') {
-            addMessage({
-              role: 'roboto',
-              content: `Tool requested: ${event.data.toolName} (${event.data.serverId ?? 'mcp'})`
-            });
-          } else if (event.type === 'tool_result') {
-            const payloadText = typeof event.data.result === 'string'
-              ? event.data.result
-              : JSON.stringify(event.data.result, null, 2);
-            addMessage({
-              role: 'roboto',
-              content: `Tool result (${event.data.toolCall.toolName}): ${payloadText}`
-            });
           } else if (event.type === 'error') {
             const message = typeof event.data.message === 'string'
               ? event.data.message
@@ -266,17 +234,6 @@ const {
 
       {/* Header */}
       <Header />
-
-      {/* MCP Server Snapshot */}
-      <div className="px-4 pt-2">
-        <McpServerManager
-          servers={servers}
-          error={serverError}
-          onRefresh={fetchServers}
-          onToggle={toggleServer}
-          togglingServers={togglingServers}
-        />
-      </div>
 
       {/* Sidebar Toggle Button */}
       <Button
@@ -367,25 +324,7 @@ const {
           onAgentToggle={toggleAgentMode}
         />
 
-        {/* Event Panel */}
-        <div className="w-full px-4 pt-4">
-          <div className="grid gap-4 lg:grid-cols-[1.2fr,0.8fr]">
-            <ChatPanel events={events} />
-            <McpAppFrame
-              servers={servers}
-              allowedTools={allowedTools}
-              onToggleTool={toggleTool}
-            />
-          </div>
-        </div>
       </main>
-
-      <ToolApprovalModal
-        approval={pendingApproval ?? undefined}
-        open={Boolean(pendingApproval)}
-        onApprove={() => pendingApproval && approveAction(pendingApproval.approvalId)}
-        onDeny={() => pendingApproval && denyAction(pendingApproval.approvalId)}
-      />
 
       {/* Vent Mode Blood Rain Effect */}
       {ventMode && (

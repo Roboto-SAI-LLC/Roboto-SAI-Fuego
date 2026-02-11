@@ -16,7 +16,6 @@ import Legacy from "./pages/Legacy";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import MCPPage from "./pages/MCP";
 import Settings from "./pages/Settings";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuthStore } from "@/stores/authStore";
@@ -61,11 +60,6 @@ const App = () => {
             <Route path="/legacy" element={
               <RequireAuth>
                 <Legacy />
-              </RequireAuth>
-            } />
-            <Route path="/mcp" element={
-              <RequireAuth>
-                <MCPPage />
               </RequireAuth>
             } />
             <Route path="/settings" element={

@@ -126,13 +126,6 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️ Voice router not available: {e}")
 
-try:
-    from mcp_router import router as mcp_router
-    app.include_router(mcp_router)
-    logger.info("✅ MCP router mounted")
-except ImportError as e:
-    logger.warning(f"⚠️ MCP router not available: {e}")
-
 @app.get("/", tags=["Root"])
 async def root():
     """Root endpoint with API info"""
