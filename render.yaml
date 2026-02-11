@@ -61,6 +61,8 @@ services:
         value: https://roboto-sai-backend.onrender.com
       - key: VITE_API_URL
         value: https://roboto-sai-backend.onrender.com
+      - key: VITE_OS_AGENT_URL
+        value: https://roboto-sai-os-agent.onrender.com
       - key: VITE_SUPABASE_URL
         sync: false
       - key: VITE_SUPABASE_ANON_KEY

@@ -9,7 +9,7 @@ import {
 
 const ROBOTO_CONFIG: RobotoClientConfig = {
   backendBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000',
-  osAgentBaseUrl: import.meta.env.VITE_OS_AGENT_URL || 'http://localhost:5055'
+  osAgentBaseUrl: import.meta.env.VITE_OS_AGENT_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5055' : '')
 };
 
 const TOOL_STATE_STORAGE_KEY = 'roboto_mcp_tool_allowlist';
@@ -54,8 +54,12 @@ export function useRobotoClient() {
   const refreshConnections = useCallback(async () => {
     setIsChecking(true);
     try {
-      const [backendOk, osAgentOk] = await Promise.all([client.testBackend(), client.testOsAgent()]);
-      setIsConnected(backendOk && osAgentOk);
+      const backendOk = await client.testBackend();
+      // Only test OS agent if URL is configured
+      const osAgentOk = ROBOTO_CONFIG.osAgentBaseUrl
+        ? await client.testOsAgent()
+        : false;
+      setIsConnected(backendOk);
     } catch (error) {
       console.error('Connection test failed', error);
       setIsConnected(false);

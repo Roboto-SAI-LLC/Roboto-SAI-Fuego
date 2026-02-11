@@ -24,18 +24,22 @@ const MCPPage = () => {
     const queryClient = useQueryClient();
     const [config, setConfig] = useState<MCPConfig | null>(null);
 
+    const osAgentUrl = import.meta.env.VITE_OS_AGENT_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5055' : '');
+
     const { data, isLoading } = useQuery({
         queryKey: ["mcp-servers"],
         queryFn: async () => {
-            const res = await fetch(`${import.meta.env.VITE_OS_AGENT_URL || 'http://localhost:5055'}/mcp/servers`);
+            if (!osAgentUrl) return { servers: [] } as MCPConfig;
+            const res = await fetch(`${osAgentUrl}/mcp/servers`);
             if (!res.ok) throw new Error("Failed to fetch MCP servers");
             return await res.json() as MCPConfig;
-        }
+        },
+        retry: false,
     });
 
     const updateConfig = useMutation({
         mutationFn: async (serverId: string, enabled: boolean) => {
-            const res = await fetch(`${import.meta.env.VITE_OS_AGENT_URL || 'http://localhost:5055'}/mcp/servers/${serverId}`, {
+            const res = await fetch(`${osAgentUrl}/mcp/servers/${serverId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ enabled })

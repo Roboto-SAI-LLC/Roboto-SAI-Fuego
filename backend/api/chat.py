@@ -2,14 +2,49 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 import json
+import logging
 import re
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+from supabase._async.client import AsyncClient
 
 from services.grok_client import get_grok_client
+from utils.supabase_client import get_async_supabase_client
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# ── Supabase dependency ──────────────────────────────────────────────
+
+async def _get_supabase() -> AsyncClient:
+    client = await get_async_supabase_client()
+    if not client:
+        raise HTTPException(status_code=500, detail="Supabase client not available")
+    return client
+
+
+async def _get_current_user(request: Request, supabase: AsyncClient = Depends(_get_supabase)) -> dict:
+    """Extract and verify the authenticated user from access_token cookie or Authorization header."""
+    auth_header = request.headers.get("authorization")
+    token = None
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.replace("Bearer ", "")
+    else:
+        token = request.cookies.get("access_token")
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        user_response = await supabase.auth.get_user(token)
+        if not user_response.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return {"id": user_response.user.id, "email": user_response.user.email}
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=f"Auth failed: {exc}")
 
 
 class ToolRequest(BaseModel):
@@ -222,3 +257,62 @@ async def chat(
         mode=meta.get("mode", "entangled"),
         events=events,
     )
+
+
+# ── Chat history ─────────────────────────────────────────────────────
+
+@router.get("/chat/history")
+async def get_chat_history(
+    request: Request,
+    session_id: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+    user: dict = Depends(_get_current_user),
+    supabase: AsyncClient = Depends(_get_supabase),
+):
+    """Retrieve recent chat history for the authenticated user."""
+    try:
+        query = (
+            supabase.table("messages")
+            .select("*")
+            .eq("user_id", user["id"])
+            .order("created_at", desc=True)
+            .limit(limit)
+        )
+        if session_id:
+            query = query.eq("session_id", session_id)
+
+        result = await query.execute()
+        messages = result.data or []
+
+        return {
+            "success": True,
+            "count": len(messages),
+            "messages": [
+                {
+                    "id": msg.get("id"),
+                    "user_id": msg.get("user_id"),
+                    "session_id": msg.get("session_id"),
+                    "role": msg.get("role"),
+                    "content": msg.get("content"),
+                    "emotion": msg.get("emotion"),
+                    "emotion_text": msg.get("emotion_text"),
+                    "emotion_probabilities": (
+                        json.loads(msg["emotion_probabilities"])
+                        if isinstance(msg.get("emotion_probabilities"), str)
+                        else msg.get("emotion_probabilities")
+                    ),
+                    "created_at": msg.get("created_at"),
+                }
+                for msg in messages
+            ],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as exc:
+        logger.error(f"Chat history error: {exc}")
+        # Return empty rather than crash — table may not exist yet
+        return {
+            "success": True,
+            "count": 0,
+            "messages": [],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
