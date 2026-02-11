@@ -30,19 +30,21 @@ const MCPPage = () => {
         queryKey: ["mcp-servers"],
         queryFn: async () => {
             if (!osAgentUrl) return { servers: [] } as MCPConfig;
-            const res = await fetch(`${osAgentUrl}/mcp/servers`);
+            const res = await fetch(`${osAgentUrl}/api/servers`);
             if (!res.ok) throw new Error("Failed to fetch MCP servers");
-            return await res.json() as MCPConfig;
+            const json = await res.json();
+            // OS agent wraps response in { success, data: { servers } }
+            return { servers: json.data?.servers || json.servers || [] } as MCPConfig;
         },
         retry: false,
     });
 
     const updateConfig = useMutation({
-        mutationFn: async (serverId: string, enabled: boolean) => {
-            const res = await fetch(`${osAgentUrl}/mcp/servers/${serverId}`, {
-                method: "PATCH",
+        mutationFn: async ({ serverId, enabled }: { serverId: string; enabled: boolean }) => {
+            const res = await fetch(`${osAgentUrl}/api/servers/toggle`, {
+                method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ enabled })
+                body: JSON.stringify({ serverId, enabled })
             });
             if (!res.ok) throw new Error("Failed to update server");
             return await res.json();
@@ -68,7 +70,7 @@ const MCPPage = () => {
     });
 
     const toggleServer = (serverId: string, enabled: boolean) => {
-        updateConfig.mutate(serverId, enabled);
+        updateConfig.mutate({ serverId, enabled });
     };
 
     if (isLoading) return <div className="p-10 text-center">Loading MCP Config...</div>;

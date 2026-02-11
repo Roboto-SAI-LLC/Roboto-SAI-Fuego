@@ -4,6 +4,7 @@ from uuid import uuid4
 import json
 import logging
 import re
+import uuid as _uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -316,3 +317,44 @@ async def get_chat_history(
             "messages": [],
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+
+
+# ── Feedback ─────────────────────────────────────────────────────────
+
+class FeedbackRequest(BaseModel):
+    """Message feedback request"""
+    message_id: str
+    rating: int  # 1=thumbs up, -1=thumbs down
+
+
+@router.post("/chat/feedback")
+async def submit_feedback(
+    feedback: FeedbackRequest,
+    user: dict = Depends(_get_current_user),
+    supabase: AsyncClient = Depends(_get_supabase),
+):
+    """Submit thumbs up/down feedback for a message."""
+    if feedback.rating not in [1, -1]:
+        raise HTTPException(status_code=400, detail="Rating must be 1 (thumbs up) or -1 (thumbs down)")
+
+    try:
+        _uuid.UUID(feedback.message_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid message_id format")
+
+    data = {
+        "message_id": feedback.message_id,
+        "user_id": user["id"],
+        "rating": feedback.rating,
+    }
+    try:
+        await supabase.table("message_feedback").insert(data).execute()
+    except Exception as exc:
+        logger.error(f"Feedback insert error: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to record feedback")
+
+    return {
+        "success": True,
+        "message": "Feedback recorded. The eternal flame adapts.",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }

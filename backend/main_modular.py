@@ -111,6 +111,28 @@ app.add_middleware(
 # Include modular API routers
 app.include_router(api_router, prefix="/api")
 
+# Mount additional routers that use absolute /api/* paths (graceful - skip if deps missing)
+try:
+    from payments import router as payments_router
+    app.include_router(payments_router)
+    logger.info("✅ Payments router mounted")
+except ImportError as e:
+    logger.warning(f"⚠️ Payments router not available: {e}")
+
+try:
+    from voice_router import router as voice_router
+    app.include_router(voice_router)
+    logger.info("✅ Voice router mounted")
+except ImportError as e:
+    logger.warning(f"⚠️ Voice router not available: {e}")
+
+try:
+    from mcp_router import router as mcp_router
+    app.include_router(mcp_router)
+    logger.info("✅ MCP router mounted")
+except ImportError as e:
+    logger.warning(f"⚠️ MCP router not available: {e}")
+
 @app.get("/", tags=["Root"])
 async def root():
     """Root endpoint with API info"""

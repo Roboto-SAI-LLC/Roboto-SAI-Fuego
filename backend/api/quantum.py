@@ -13,7 +13,7 @@ from services.quantum_engine import get_quantum_session, initialize_quantum_kern
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/quantum", tags=["quantum"])
+router = APIRouter(prefix="/quantum", tags=["quantum"])
 
 # Pydantic models for request/response
 class SimulationRequest(BaseModel):

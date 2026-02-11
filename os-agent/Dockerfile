@@ -34,7 +34,8 @@ RUN npm ci
 # Copy source
 COPY os-agent/src/ ./src/
 COPY os-agent/tsconfig.json ./
-COPY os-agent/.env ./
+# .env is gitignored; env vars come from Render config in production
+COPY os-agent/.env* ./
 
 # Build TypeScript
 RUN npm run build
