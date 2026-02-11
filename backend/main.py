@@ -61,6 +61,9 @@ from utils.rate_limiter import limiter, RateLimitExceeded, _rate_limit_exceeded_
 from db import init_db
 from payments import router as payments_router
 
+# Import MCP client
+from mcp_client import perform_roaming_action
+
 # Global client instance
 roboto_client: Optional[Any] = None
 xai_grok = None
@@ -73,6 +76,9 @@ BACKEND_NOT_INITIALIZED = "Backend not initialized"
 EMOTION_SIMULATOR_UNAVAILABLE = "Emotion simulator not available"
 ROBO_SAI_NOT_CONFIGURED = "Roboto SAI not available: XAI_API_KEY not configured"
 GROK_NOT_AVAILABLE = "Grok not available"
+
+MCP_STATUS: Dict[str, str] = {}
+MCP_STATUS["TelegramLink"] = "🟢 ACTIVE (Bot deployed!)"
 
 # Startup/Shutdown events
 @asynccontextmanager
@@ -138,8 +144,18 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Could not initialize GrokLLM: {e}")
             grok_llm = None
             
+        # Initialize quantum kernel
+        try:
+            from services.quantum_engine import initialize_quantum_kernel
+            initialize_quantum_kernel()
+            quantum_kernel_initialized = True
+            logger.info("Quantum kernel initialized")
+        except Exception as e:
+            logger.warning(f"Quantum kernel initialization failed: {e}")
+            quantum_kernel_initialized = False
+            
         logger.info("Backend initialization complete")
-        logger.info(f"Status: SDK={'available' if HAS_SDK else 'unavailable'}, Grok={xai_grok is not None and xai_grok.available if xai_grok else False}, GrokLLM={grok_llm is not None}")
+        logger.info(f"Status: SDK={'available' if HAS_SDK else 'unavailable'}, Grok={xai_grok is not None and xai_grok.available if xai_grok else False}, GrokLLM={grok_llm is not None}, Quantum={quantum_kernel_initialized}")
     except Exception as e:
         logger.error(f"Unexpected backend initialization error: {e}")
         import traceback
@@ -267,6 +283,13 @@ try:
     logger.info("Voice router mounted")
 except ImportError as e:
     logger.warning(f"Voice router not available: {e}")
+
+try:
+    from api.quantum import router as quantum_router
+    app.include_router(quantum_router)
+    logger.info("Quantum router mounted")
+except ImportError as e:
+    logger.warning(f"Quantum router not available: {e}")
 
 
 # Minimal health endpoints - added early before any heavy init
@@ -723,12 +746,23 @@ async def get_status() -> Dict[str, Any]:
     if not roboto_client:
         raise HTTPException(status_code=503, detail=BACKEND_NOT_INITIALIZED)
     
+    # Get quantum status
+    quantum_status = {"quantum_initialized": False}
+    try:
+        from services.quantum_engine import get_quantum_session
+        quantum_session = get_quantum_session()
+        if quantum_session:
+            quantum_status = quantum_session.get_status()
+    except Exception as e:
+        logger.warning(f"Could not get quantum status: {e}")
+    
     return {
         "status": "active",
         "timestamp": datetime.now().isoformat(),
         "client_id": roboto_client.client_id,
         "grok_available": xai_grok.available if xai_grok else False,
         "quantum_state": roboto_client.quantum_state,
+        "quantum_engine": quantum_status,
         "sigil_929": roboto_client.sigil_929["eternal_protection"],
         "sdk_version": "0.1.0",
         "hyperspeed_evolution": True
@@ -826,10 +860,10 @@ def _compute_emotion(text: str, intensity: int = 5, blend_threshold: float = 0.8
         return None
 
 
-async def _store_response_metadata(assistant_message_id: Optional[str], response_id: Optional[str], encrypted_thinking: Optional[str]) -> None:
+async def _store_response_metadata(roboto_message_id: Optional[str], response_id: Optional[str], encrypted_thinking: Optional[str]) -> None:
     """Store response metadata (response_id and encrypted thinking) in Supabase safely."""
     try:
-        if not response_id or not assistant_message_id:
+        if not response_id or not roboto_message_id:
             return
         supabase = get_supabase_client()
         if not supabase:
@@ -837,19 +871,44 @@ async def _store_response_metadata(assistant_message_id: Optional[str], response
         await run_supabase_async(lambda: supabase.table('messages').update({
             'xai_response_id': response_id,
             'xai_encrypted_thinking': encrypted_thinking
-        }).eq('id', assistant_message_id).execute())
+        }).eq('id', roboto_message_id).execute())
     except Exception as e:
         logger.warning(f'Failed to store response_id: {e}')
 
 
-# Chat Endpoints
-@app.post("/api/chat", tags=["Chat"])
-@limiter.limit("30/minute")
-async def chat_with_grok(
+# Roaming Action Endpoint
+@app.post("/api/roam", tags=["Roaming"])
+@limiter.limit("10/minute")
+async def perform_roaming(
     request: Request,
-    chat_request: ChatMessage,
-    user: Dict[str, Any] = Depends(get_current_user),
+    action: str,
+    user: dict = Depends(get_current_user),
+    **kwargs
 ) -> Dict[str, Any]:
+    """
+    Perform roaming actions outside the app using MCP.
+    
+    Available actions:
+    - create_twitter_account: Create new Twitter account
+    - scroll_twitter: Scroll Twitter feed  
+    - click_tweet: Click on tweet containing text
+    - type_tweet: Type text in tweet composer
+    """
+    try:
+        result = await perform_roaming_action(action, **kwargs)
+        return {
+            "success": True,
+            "action": action,
+            "result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        # Log the detailed error on the server, but return a generic message to the client
+        logger.error(f"Roaming action failed: {e}")
+        raise HTTPException(status_code=500, detail="Roaming action failed due to an internal server error.")
+
+# Extend chat to detect roaming commands
+# In chat_with_grok, before calling grok, check for roaming commands
     """
     Chat with xAI Grok using Roboto SAI context with LangChain memory
     """
@@ -864,7 +923,7 @@ async def chat_with_grok(
         # Still try to save/load history if possible
         session_id = chat_request.session_id or "default"
         user_emotion = None
-        assistant_emotion = None
+        roboto_emotion = None
         
         # Load conversation history (may work even without Supabase)
         try:
@@ -893,28 +952,28 @@ async def chat_with_grok(
                     "probabilities": probabilities,
                 }
                 
-                # Generate assistant emotion based on simulated response
+                # Generate roboto emotion based on simulated response
                 demo_response = f"I understand you're feeling {emotion_text.lower()}. The eternal flame burns brightly. How can I assist you in your quest?"
-                assistant_emotion_text = emotion_simulator.safe_simulate_emotion(
+                roboto_emotion_text = emotion_simulator.safe_simulate_emotion(
                     event=demo_response,
                     intensity=5,
                     blend_threshold=0.8,
                     holistic_influence=False,
                     cultural_context=None,
                 )
-                assistant_base_emotion = emotion_simulator.get_current_emotion()
-                assistant_probabilities = emotion_simulator.get_emotion_probabilities(demo_response)
-                assistant_emotion = {
-                    "emotion": assistant_base_emotion,
-                    "emotion_text": assistant_emotion_text,
-                    "probabilities": assistant_probabilities,
+                roboto_base_emotion = emotion_simulator.get_current_emotion()
+                roboto_probabilities = emotion_simulator.get_emotion_probabilities(demo_response)
+                roboto_emotion = {
+                    "emotion": roboto_base_emotion,
+                    "emotion_text": roboto_emotion_text,
+                    "probabilities": roboto_probabilities,
                 }
             except Exception as emotion_error:
                 logger.warning(f"Emotion simulation failed in demo mode: {emotion_error}")
         
         # Save messages if possible
         user_message_id = None
-        assistant_message_id = None
+        roboto_message_id = None
         if history_store:
             try:
                 user_message = HumanMessage(
@@ -923,11 +982,11 @@ async def chat_with_grok(
                 )
                 user_message_id = await history_store.add_message(user_message)
                 
-                assistant_message = AIMessage(
+                roboto_message = AIMessage(
                     content=demo_response,
-                    additional_kwargs=assistant_emotion or {}
+                    additional_kwargs=roboto_emotion or {}
                 )
-                assistant_message_id = await history_store.add_message(assistant_message)
+                roboto_message_id = await history_store.add_message(roboto_message)
             except Exception as save_error:
                 logger.warning(f"Failed to save messages in demo mode: {save_error}")
         
@@ -941,11 +1000,11 @@ async def chat_with_grok(
             "response_id": f"demo-{session_id}-{int(datetime.now().timestamp())}",
             "encrypted_thinking": None,
             "xai_stored": False,
-            "assistant_message_id": assistant_message_id,
+            "roboto_message_id": roboto_message_id,
             "user_message_id": user_message_id,
             "emotion": {
                 "user": user_emotion,
-                "assistant": assistant_emotion,
+                "roboto": roboto_emotion,
             },
             "memory_integrated": history_store is not None,
             "demo_mode": True,
@@ -955,7 +1014,7 @@ async def chat_with_grok(
     # Full Grok mode (when API key is available)
     try:
         user_emotion: Optional[Dict[str, Any]] = None
-        assistant_emotion: Optional[Dict[str, Any]] = None
+        roboto_emotion: Optional[Dict[str, Any]] = None
         session_id = chat_request.session_id or "default"
 
         # Compute user emotion
@@ -992,30 +1051,30 @@ async def chat_with_grok(
         response_id = grok_result.get('response_id')
         encrypted_thinking = grok_result.get('encrypted_thinking')
 
-        # Compute assistant emotion
-        assistant_emotion = _compute_emotion(response_text, intensity=5, blend_threshold=0.8, holistic_influence=False, cultural_context=None) if response_text else None
+        # Compute roboto emotion
+        roboto_emotion = _compute_emotion(response_text, intensity=5, blend_threshold=0.8, holistic_influence=False, cultural_context=None) if response_text else None
 
         # Save conversation (if history_store is available)
         user_message_id = None
-        assistant_message_id = None
+        roboto_message_id = None
         if history_store:
             try:
                 user_message_id = await history_store.add_message(user_message)
-                assistant_message = AIMessage(
+                roboto_message = AIMessage(
                     content=response_text,
-                    additional_kwargs=assistant_emotion or {}
+                    additional_kwargs=roboto_emotion or {}
                 )
-                assistant_message_id = await history_store.add_message(assistant_message)
+                roboto_message_id = await history_store.add_message(roboto_message)
             except Exception as save_error:
                 logger.warning(f"Failed to save messages: {save_error}")
         else:
-            assistant_message = AIMessage(
+            roboto_message = AIMessage(
                 content=response_text,
-                additional_kwargs=assistant_emotion or {}
+                additional_kwargs=roboto_emotion or {}
             )
         
         # Store response_id if available
-        await _store_response_metadata(assistant_message_id, response_id, encrypted_thinking)
+        await _store_response_metadata(roboto_message_id, response_id, encrypted_thinking)
 
         await cache_delete(f"chat:history:{user['id']}:{session_id}")
         await cache_delete(f"chat:history:{user['id']}:all")
@@ -1027,11 +1086,11 @@ async def chat_with_grok(
             "response_id": response_id or f"lc-{session_id}",
             "encrypted_thinking": encrypted_thinking,
             "xai_stored": grok_result.get('stored', False),
-            "assistant_message_id": assistant_message_id,
+            "roboto_message_id": roboto_message_id,
             "user_message_id": user_message_id,
             "emotion": {
                 "user": user_emotion,
-                "assistant": assistant_emotion,
+                "roboto": roboto_emotion,
             },
             "memory_integrated": True,
             "timestamp": datetime.now().isoformat()

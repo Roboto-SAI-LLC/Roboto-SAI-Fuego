@@ -9,43 +9,47 @@ import { Database, Server, RefreshCw, Power } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface MCPServer {
-    command?: string;
-    args?: string[];
-    type?: string;
-    url?: string;
-    disabled?: boolean;
+    id: string;
+    name: string;
+    description: string;
+    tools: Array<{ name: string; description: string }>;
+    enabled: boolean;
 }
 
 interface MCPConfig {
-    mcpServers: Record<string, MCPServer>;
+    servers: MCPServer[];
 }
 
 const MCPPage = () => {
     const queryClient = useQueryClient();
     const [config, setConfig] = useState<MCPConfig | null>(null);
 
+    const osAgentUrl = import.meta.env.VITE_OS_AGENT_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5055' : '');
+
     const { data, isLoading } = useQuery({
-        queryKey: ["mcp-config"],
+        queryKey: ["mcp-servers"],
         queryFn: async () => {
-            const res = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/mcp/config`);
-            if (!res.ok) throw new Error("Failed to fetch config");
+            if (!osAgentUrl) return { servers: [] } as MCPConfig;
+            const res = await fetch(`${osAgentUrl}/mcp/servers`);
+            if (!res.ok) throw new Error("Failed to fetch MCP servers");
             return await res.json() as MCPConfig;
-        }
+        },
+        retry: false,
     });
 
     const updateConfig = useMutation({
-        mutationFn: async (newConfig: MCPConfig) => {
-            const res = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/mcp/config`, {
-                method: "POST",
+        mutationFn: async (serverId: string, enabled: boolean) => {
+            const res = await fetch(`${osAgentUrl}/mcp/servers/${serverId}`, {
+                method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(newConfig)
+                body: JSON.stringify({ enabled })
             });
-            if (!res.ok) throw new Error("Failed to update config");
+            if (!res.ok) throw new Error("Failed to update server");
             return await res.json();
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["mcp-config"] });
-            toast.success("Configuration updated locally (Check backend logs for persistence)");
+            queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+            toast.success("Server status updated");
         },
         onError: (err) => {
             toast.error("Failed to update: " + err.message);
@@ -63,21 +67,13 @@ const MCPPage = () => {
         }
     });
 
-    const toggleServer = (name: string, current: boolean) => {
-        if (!data) return;
-        const newConfig = { ...data };
-        if (!newConfig.mcpServers[name]) return;
-
-        newConfig.mcpServers[name] = {
-            ...newConfig.mcpServers[name],
-            disabled: !current
-        };
-        updateConfig.mutate(newConfig);
+    const toggleServer = (serverId: string, enabled: boolean) => {
+        updateConfig.mutate(serverId, enabled);
     };
 
     if (isLoading) return <div className="p-10 text-center">Loading MCP Config...</div>;
 
-    const servers = data?.mcpServers || {};
+    const servers = data?.servers || [];
 
     return (
         <div className="min-h-screen bg-background text-foreground">
@@ -99,35 +95,47 @@ const MCPPage = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {Object.entries(servers).map(([name, server]) => (
+                    {servers.map((server) => (
                         <motion.div
-                            key={name}
+                            key={server.id}
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             layout
                         >
-                            <Card className={`border-l-4 ${server.disabled ? 'border-l-muted' : 'border-l-green-500'} bg-card/50 backdrop-blur-sm`}>
+                            <Card className={`border-l-4 ${!server.enabled ? 'border-l-muted' : 'border-l-green-500'} bg-card/50 backdrop-blur-sm`}>
                                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                                     <div className="space-y-1">
                                         <CardTitle className="text-lg flex items-center gap-2">
-                                            {server.type === 'http' ? <Server className="w-4 h-4" /> : <Database className="w-4 h-4" />}
-                                            {name}
+                                            <Server className="w-4 h-4" />
+                                            {server.name}
                                         </CardTitle>
+                                        <p className="text-sm text-muted-foreground">{server.description}</p>
                                     </div>
                                     <Switch
-                                        checked={!server.disabled}
-                                        onCheckedChange={() => toggleServer(name, !server.disabled)}
+                                        checked={server.enabled}
+                                        onCheckedChange={(enabled) => toggleServer(server.id, enabled)}
                                     />
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="text-sm font-mono bg-muted/50 p-2 rounded mb-2 overflow-x-auto">
-                                        {server.url || (server.command ? `${server.command} ${server.args?.join(' ')}` : 'Unknown')}
+                                    <div className="text-sm text-muted-foreground mb-2">
+                                        {server.tools.length} tools available
+                                    </div>
+                                    <div className="text-xs space-y-1">
+                                        {server.tools.slice(0, 3).map((tool, idx) => (
+                                            <div key={idx} className="truncate" title={tool.description}>
+                                                • {tool.name}
+                                            </div>
+                                        ))}
+                                        {server.tools.length > 3 && (
+                                            <div className="text-muted-foreground">
+                                                +{server.tools.length - 3} more...
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex justify-between items-center mt-4">
-                                        <span className={`text-xs px-2 py-1 rounded-full ${server.disabled ? 'bg-muted text-muted-foreground' : 'bg-green-500/10 text-green-500'}`}>
-                                            {server.disabled ? 'Disabled' : 'Active'}
+                                        <span className={`text-xs px-2 py-1 rounded-full ${!server.enabled ? 'bg-muted text-muted-foreground' : 'bg-green-500/10 text-green-500'}`}>
+                                            {server.enabled ? 'Active' : 'Disabled'}
                                         </span>
-                                        {/* Edit button could go here */}
                                     </div>
                                 </CardContent>
                             </Card>

@@ -1,6 +1,6 @@
 fastapi>=0.104.0
 uvicorn>=0.24.0
-pydantic>=2.0.0
+pydantic[email]>=2.0.0
 python-dotenv>=1.0.0
 websockets>=12.0
 sqlalchemy>=2.0.0
@@ -18,15 +18,18 @@ bcrypt==4.0.1
 bleach==6.0.0
 pytest==7.4.0
 
+# Rate limiting
+slowapi>=0.1.9
+
 # LangChain for conversation memory
 langchain-core>=0.3.27,<0.4.0
 langchain-community>=0.3.10,<0.4.0
 
 # Roboto SAI SDK for XAI Grok integration (from GitHub repo)
-roboto-sai-sdk @ git+https://github.com/Roboto-SAI-LLC/roboto-sai-sdk.git#egg=roboto-sai-sdk&subdirectory=roboto-sai-sdk
+# roboto-sai-sdk @ git+https://github.com/Roboto-SAI-LLC/roboto-sai-sdk.git#egg=roboto-sai-sdk&subdirectory=roboto-sai-sdk
 
 # Quantum simulation (qutip is lightweight)
 qutip>=5.2.0
 numpy>=1.24.0
 scipy>=1.10.0
-supabase==2.3.0
+supabase

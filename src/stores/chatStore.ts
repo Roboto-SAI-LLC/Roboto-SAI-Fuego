@@ -17,7 +17,7 @@ export interface FileAttachment {
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'roboto';
   content: string;
   timestamp: Date;
   attachments?: FileAttachment[];
@@ -98,7 +98,7 @@ const reviveMessage = (value: unknown): Message => {
 
   return {
     id: typeof value.id === 'string' ? value.id : crypto.randomUUID(),
-    role: value.role === 'assistant' ? 'assistant' : 'user',
+    role: (value.role === 'roboto' || value.role === 'assistant') ? 'roboto' : 'user',
     content: typeof value.content === 'string' ? value.content : '',
     timestamp: reviveDate(value.timestamp),
     attachments: Array.isArray(value.attachments) ? (value.attachments as FileAttachment[]) : undefined,
@@ -167,7 +167,7 @@ export const useChatStore = create<ChatState>()(
         const maxMessages = 50; // Increased for more history
         const recent = allMessages.slice(-maxMessages);
         const filtered = recent.filter(message => {
-          if (message.role !== 'assistant') return true;
+          if (message.role !== 'roboto') return true;
           const content = typeof message.content === 'string' ? message.content : '';
           return !content.startsWith('⚠️ **Connection to the flame matrix interrupted.**');
         });

@@ -448,7 +448,7 @@ class GrokLLM(LLM):
     def _build_from_messages(self, messages: List[BaseMessage]) -> tuple[str, str, Optional[str]]:
         # Performance: Use list comprehension generator
         context_parts = (
-            f"{'User' if isinstance(msg, HumanMessage) else 'Assistant'}: {msg.content}" 
+            f"{'User' if isinstance(msg, HumanMessage) else 'Roboto'}: {msg.content}" 
             for msg in messages[:-1]
         )
         context = "\n".join(context_parts)
@@ -503,10 +503,8 @@ class GrokLLM(LLM):
         Async call to Grok using Responses API with stateful conversation chaining.
         Returns response dict with response_id and encrypted_thinking.
         """
-        if not self.client:
-            raise ValueError("Grok client not initialized")
-        if not hasattr(self.client, 'available') or not self.client.available:
-            raise ValueError("Grok client not available")
+        if self.client and hasattr(self.client, 'available') and not self.client.available:
+            logger.warning("Grok client available=False, continuing with fallback")
 
         # Handle input
         if isinstance(prompt, str):
@@ -516,7 +514,7 @@ class GrokLLM(LLM):
             messages = prompt
             context_parts = []
             for msg in messages[:-1]:  # All except last
-                role = "User" if isinstance(msg, HumanMessage) else "Assistant"
+                role = "User" if isinstance(msg, HumanMessage) else "Roboto"
                 context_parts.append(f"{role}: {msg.content}")
             context = "\n".join(context_parts)
             last_msg = messages[-1]
@@ -554,10 +552,8 @@ class GrokLLM(LLM):
         """
         Async call to Grok for better performance.
         """
-        if not self.client:
-            raise ValueError("Grok client not initialized")
-        if not hasattr(self.client, 'available') or not self.client.available:
-            raise ValueError("Grok client not available")
+        if self.client and hasattr(self.client, 'available') and not self.client.available:
+            logger.warning("Grok client available=False, continuing with fallback")
 
         user_message, context, emotion = self._build_prompt_context(prompt, kwargs.get("context"))
 

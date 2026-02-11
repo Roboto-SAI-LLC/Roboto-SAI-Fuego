@@ -16,6 +16,11 @@ import hashlib
 import logging
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
+
+# Configure logging early (before any usage)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Optional textblob import for sentiment analysis
 try:
     from textblob import TextBlob
@@ -32,10 +37,6 @@ import asyncio
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import time
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Import real-time data system for contextual enhancement
 try:
@@ -2742,7 +2743,7 @@ try:
                     # Create appropriate message type
                     if role.lower() == "user":
                         message = HumanMessage(content=content, additional_kwargs=emotion_data)
-                    else:  # assistant
+                    else:  # roboto or assistant
                         message = AIMessage(content=content, additional_kwargs=emotion_data)
 
                     messages.append(message)
@@ -2760,7 +2761,7 @@ try:
                 if isinstance(message, HumanMessage):
                     role = "user"
                 else:
-                    role = "assistant"
+                    role = "roboto"
 
                 # Prepare message data
                 message_data = {

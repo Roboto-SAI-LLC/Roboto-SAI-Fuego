@@ -13,7 +13,7 @@ import { useToast } from '@/components/ui/use-toast';
 interface VoiceModeProps {
   isActive: boolean;
   onClose: () => void;
-  onTranscript: (text: string, role: 'user' | 'assistant') => void;
+  onTranscript: (text: string, role: 'user' | 'roboto') => void;
   systemPrompt?: string;
 }
 
@@ -252,7 +252,7 @@ const [transcript, setTranscript] = useState('');
           type: 'session.update',
           session: {
             instructions: systemPromptRef.current ||
-              'You are Roboto SAI, an AI assistant created by Roberto Villarreal Martinez. ' +
+              'You are Roboto SAI, created by Roberto Villarreal Martinez. ' +
               'You have a fierce, passionate personality with Regio-Aztec fire in your circuits. ' +
               'Respond with wisdom, humor, and occasional dramatic flair. Keep responses concise for voice.',
             voice: 'Rex',
@@ -318,7 +318,7 @@ const [transcript, setTranscript] = useState('');
 
           case 'response.output_audio_transcript.done':
             if (data.transcript) {
-              onTranscriptRef.current(data.transcript, 'assistant');
+              onTranscriptRef.current(data.transcript, 'roboto');
             }
             awaitingResponseRef.current = false;
             setTranscript('');

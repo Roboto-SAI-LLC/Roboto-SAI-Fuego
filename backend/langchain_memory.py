@@ -61,7 +61,7 @@ class SupabaseMessageHistory(BaseChatMessageHistory):
         
         if msg["role"] == "user":
             return HumanMessage(content=content, additional_kwargs=additional_kwargs)
-        elif msg["role"] == "assistant":
+        elif msg["role"] == "roboto" or msg["role"] == "assistant":
             return AIMessage(content=content, additional_kwargs=additional_kwargs)
         return None
 
@@ -91,7 +91,7 @@ class SupabaseMessageHistory(BaseChatMessageHistory):
 
     async def add_message(self, message: BaseMessage) -> Optional[str]:
         """Async add message."""
-        role = "user" if isinstance(message, HumanMessage) else "assistant" if isinstance(message, AIMessage) else None
+        role = "user" if isinstance(message, HumanMessage) else "roboto" if isinstance(message, AIMessage) else None
         if not role:
             return None
 
