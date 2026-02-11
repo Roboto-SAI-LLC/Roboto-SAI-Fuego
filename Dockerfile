@@ -71,9 +71,10 @@ RUN npm run build && npm prune --production
 # Stage 3: Production (optimized for Render)
 FROM nginx:alpine AS production
 
-# Install security updates and curl for health checks
+# Install security updates, curl for health checks, and gettext for envsubst
 RUN apk add --no-cache \
     curl \
+    gettext \
     && rm -rf /var/cache/apk/*
 
 # Create nginx user and directories (skip if already exists)
