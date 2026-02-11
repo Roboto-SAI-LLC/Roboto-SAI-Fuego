@@ -56,8 +56,8 @@ services:
   # Python FastAPI Backend - Roboto SAI 2026
   roboto-sai-backend:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: roboto-sai-backend
     ports:
       - "5000:10000"

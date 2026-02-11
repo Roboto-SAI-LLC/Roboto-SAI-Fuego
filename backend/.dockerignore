@@ -1,15 +1,33 @@
-# Exclude virtual environments, cache, and unnecessary files
+# Exclude only essentials for Docker build
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments - THESE MUST BE EXCLUDED
+venv/
+venv_linux/
 .venv/
-venv*/
+env/
+ENV/
+
+# Environment files
 .env
 .env.*
-*.log
-.cache/
-data/
+
+# Testing
+.pytest_cache/
 tests/
+
+# Logs
+*.log
+
+# Data and database files (not needed in container)
+data/
 *.db
+
+# Git
 .git/
 .gitignore

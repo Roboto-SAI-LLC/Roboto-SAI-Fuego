@@ -21,6 +21,7 @@ build/
 *.swo
 *~
 .SAI_Agents/
+.github/*
 
 # OS
 .DS_Store
