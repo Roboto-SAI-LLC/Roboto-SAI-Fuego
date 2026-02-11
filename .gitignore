@@ -47,6 +47,8 @@ __pycache__/
 .github/*
 !.github/workflows/
 !.github/workflows/**
+node_modules/*
+
 # Agent-Memory
 AI-Memory/*
 .SAI_Agents/*
@@ -56,6 +58,10 @@ AI-Memory/*
 .env.backup
 .env.local
 .env.*.local
+
+# Roboto SAI SDK
+sdk/*
+
 # Virtual environments
 .venv/
 venv/
@@ -96,3 +102,10 @@ troubleshoot
 !.supabase/migrations/**
 !.supabase/config.toml
 supabase.tar.gz
+/dist/*
+/models/**/*.gguf
+apps/model-training/data/
+apps/model-training/runs/
+apps/model-training/models/
+apps/model-training/**/outputs/
+apps/model-training/**/lora-*/

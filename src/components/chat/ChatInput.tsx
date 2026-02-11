@@ -5,7 +5,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Flame, Paperclip, X, Mic, MicOff, Bot } from 'lucide-react';
+import { Send, Flame, Paperclip, X, Mic, MicOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import type { FileAttachment } from '@/stores/chatStore';
@@ -18,8 +18,6 @@ interface ChatInputProps {
   voiceMode?: boolean;
   onVoiceToggle?: () => void;
   isVoiceActive?: boolean;
-  agentMode?: boolean;
-  onAgentToggle?: () => void;
 }
 
 export const ChatInput = ({
@@ -29,9 +27,7 @@ export const ChatInput = ({
   onVentToggle,
   voiceMode,
   onVoiceToggle,
-  isVoiceActive,
-  agentMode,
-  onAgentToggle
+  isVoiceActive
 }: ChatInputProps) => {
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
@@ -224,20 +220,6 @@ export const ChatInput = ({
             </Button>
           );
         })()}
-
-        {/* Agent Mode Toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onAgentToggle}
-          className={`flex-shrink-0 transition-all duration-300 ${agentMode
-            ? 'bg-blue-500/20 text-blue-500 hover:bg-blue-500/30'
-            : 'text-muted-foreground hover:text-blue-500 hover:bg-blue-500/10'
-            }`}
-          title={agentMode ? 'Disable Agent Mode' : 'Enable Agent Mode'}
-        >
-          <Bot className="w-5 h-5" />
-        </Button>
 
         {/* Input Area */}
         <div className="flex-1 relative">

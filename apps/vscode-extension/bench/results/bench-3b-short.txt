@@ -1,0 +1,21 @@
+Roboto SAI llama-server latency benchmark
+URL: http://127.0.0.1:8787/v1/completions | requests: 5 | max_tokens: 128 | temp: 0.2
+Prompt sizes: short | languages: typescript, python
+
+Cold (first request) metrics (ms)
+Metric           min     p50     p95     p99     max
+TTFB            326.5   326.5   326.5   326.5   326.5
+First token     326.8   326.8   326.8   326.8   326.8
+Total          2777.0  2777.0  2777.0  2777.0  2777.0
+
+Warm (subsequent) metrics (ms)
+Metric           min     p50     p95     p99     max
+TTFB            155.2   157.9   191.2   191.2   191.2
+First token     155.4   158.1   191.3   191.3   191.3
+Total          1211.0  2142.9 21042.9 21042.9 21042.9
+
+All requests metrics (ms)
+Metric           min     p50     p95     p99     max
+TTFB            155.2   174.1   326.5   326.5   326.5
+First token     155.4   174.2   326.8   326.8   326.8
+Total          1211.0  2777.0 21042.9 21042.9 21042.9

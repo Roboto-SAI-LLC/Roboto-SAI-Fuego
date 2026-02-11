@@ -1,0 +1,319 @@
+{
+  "meta": {
+    "url": "http://127.0.0.1:8787/v1/completions",
+    "requests": 10,
+    "maxTokens": 128,
+    "temperature": 0.2,
+    "stopSequences": [
+      "<fim_prefix>",
+      "<fim_suffix>",
+      "<fim_middle>"
+    ],
+    "promptFilter": {
+      "sizes": [
+        "short"
+      ],
+      "languages": [
+        "typescript",
+        "python"
+      ]
+    },
+    "startedAt": "2026-02-07T16:51:25.332Z",
+    "nodeVersion": "v24.12.0"
+  },
+  "cold": {
+    "ttfbMs": {
+      "min": 555.4944999999998,
+      "p50": 555.4944999999998,
+      "p95": 555.4944999999998,
+      "p99": 555.4944999999998,
+      "max": 555.4944999999998
+    },
+    "firstTokenMs": {
+      "min": 555.7300999999998,
+      "p50": 555.7300999999998,
+      "p95": 555.7300999999998,
+      "p99": 555.7300999999998,
+      "max": 555.7300999999998
+    },
+    "totalMs": {
+      "min": 48184.7037,
+      "p50": 48184.7037,
+      "p95": 48184.7037,
+      "p99": 48184.7037,
+      "max": 48184.7037
+    },
+    "samples": [
+      {
+        "requestIndex": 0,
+        "promptId": "ts-short",
+        "language": "typescript",
+        "size": "short",
+        "promptChars": 4336,
+        "ttfbMs": 555.4944999999998,
+        "firstTokenMs": 555.7300999999998,
+        "totalMs": 48184.7037,
+        "completionChars": 536
+      }
+    ]
+  },
+  "warm": {
+    "ttfbMs": {
+      "min": 343.57380000001285,
+      "p50": 387.90929999999935,
+      "p95": 466.08499999999185,
+      "p99": 466.08499999999185,
+      "max": 466.08499999999185
+    },
+    "firstTokenMs": {
+      "min": 343.63710000005085,
+      "p50": 388.01350000000093,
+      "p95": 466.15669999999227,
+      "p99": 466.15669999999227,
+      "max": 466.15669999999227
+    },
+    "totalMs": {
+      "min": 35929.467199999985,
+      "p50": 42244.58230000001,
+      "p95": 48355.0294,
+      "p99": 48355.0294,
+      "max": 48355.0294
+    },
+    "samples": [
+      {
+        "requestIndex": 1,
+        "promptId": "py-short",
+        "language": "python",
+        "size": "short",
+        "promptChars": 4622,
+        "ttfbMs": 429.39979999999923,
+        "firstTokenMs": 429.4863000000041,
+        "totalMs": 48287.0783,
+        "completionChars": 479
+      },
+      {
+        "requestIndex": 2,
+        "promptId": "ts-short",
+        "language": "typescript",
+        "size": "short",
+        "promptChars": 4336,
+        "ttfbMs": 466.08499999999185,
+        "firstTokenMs": 466.15669999999227,
+        "totalMs": 46551.874200000006,
+        "completionChars": 536
+      },
+      {
+        "requestIndex": 3,
+        "promptId": "py-short",
+        "language": "python",
+        "size": "short",
+        "promptChars": 4622,
+        "ttfbMs": 367.90320000000065,
+        "firstTokenMs": 367.97260000000824,
+        "totalMs": 42244.58230000001,
+        "completionChars": 479
+      },
+      {
+        "requestIndex": 4,
+        "promptId": "ts-short",
+        "language": "typescript",
+        "size": "short",
+        "promptChars": 4336,
+        "ttfbMs": 358.8041999999841,
+        "firstTokenMs": 358.8926999999967,
+        "totalMs": 35929.467199999985,
+        "completionChars": 428
+      },
+      {
+        "requestIndex": 5,
+        "promptId": "py-short",
+        "language": "python",
+        "size": "short",
+        "promptChars": 4622,
+        "ttfbMs": 406.49580000000424,
+        "firstTokenMs": 406.62410000001546,
+        "totalMs": 41405.26019999999,
+        "completionChars": 479
+      },
+      {
+        "requestIndex": 6,
+        "promptId": "ts-short",
+        "language": "typescript",
+        "size": "short",
+        "promptChars": 4336,
+        "ttfbMs": 394.5158999999985,
+        "firstTokenMs": 394.5963000000338,
+        "totalMs": 41668.922699999996,
+        "completionChars": 527
+      },
+      {
+        "requestIndex": 7,
+        "promptId": "py-short",
+        "language": "python",
+        "size": "short",
+        "promptChars": 4622,
+        "ttfbMs": 387.90929999999935,
+        "firstTokenMs": 388.01350000000093,
+        "totalMs": 48355.0294,
+        "completionChars": 479
+      },
+      {
+        "requestIndex": 8,
+        "promptId": "ts-short",
+        "language": "typescript",
+        "size": "short",
+        "promptChars": 4336,
+        "ttfbMs": 343.57380000001285,
+        "firstTokenMs": 343.63710000005085,
+        "totalMs": 43530.69530000002,
+        "completionChars": 536
+      },
+      {
+        "requestIndex": 9,
+        "promptId": "py-short",
+        "language": "python",
+        "size": "short",
+        "promptChars": 4622,
+        "ttfbMs": 370.22080000001006,
+        "firstTokenMs": 370.28210000001127,
+        "totalMs": 41457.120200000005,
+        "completionChars": 479
+      }
+    ]
+  },
+  "all": {
+    "ttfbMs": {
+      "min": 343.57380000001285,
+      "p50": 387.90929999999935,
+      "p95": 555.4944999999998,
+      "p99": 555.4944999999998,
+      "max": 555.4944999999998
+    },
+    "firstTokenMs": {
+      "min": 343.63710000005085,
+      "p50": 388.01350000000093,
+      "p95": 555.7300999999998,
+      "p99": 555.7300999999998,
+      "max": 555.7300999999998
+    },
+    "totalMs": {
+      "min": 35929.467199999985,
+      "p50": 42244.58230000001,
+      "p95": 48355.0294,
+      "p99": 48355.0294,
+      "max": 48355.0294
+    },
+    "samples": [
+      {
+        "requestIndex": 0,
+        "promptId": "ts-short",
+        "language": "typescript",
+        "size": "short",
+        "promptChars": 4336,
+        "ttfbMs": 555.4944999999998,
+        "firstTokenMs": 555.7300999999998,
+        "totalMs": 48184.7037,
+        "completionChars": 536
+      },
+      {
+        "requestIndex": 1,
+        "promptId": "py-short",
+        "language": "python",
+        "size": "short",
+        "promptChars": 4622,
+        "ttfbMs": 429.39979999999923,
+        "firstTokenMs": 429.4863000000041,
+        "totalMs": 48287.0783,
+        "completionChars": 479
+      },
+      {
+        "requestIndex": 2,
+        "promptId": "ts-short",
+        "language": "typescript",
+        "size": "short",
+        "promptChars": 4336,
+        "ttfbMs": 466.08499999999185,
+        "firstTokenMs": 466.15669999999227,
+        "totalMs": 46551.874200000006,
+        "completionChars": 536
+      },
+      {
+        "requestIndex": 3,
+        "promptId": "py-short",
+        "language": "python",
+        "size": "short",
+        "promptChars": 4622,
+        "ttfbMs": 367.90320000000065,
+        "firstTokenMs": 367.97260000000824,
+        "totalMs": 42244.58230000001,
+        "completionChars": 479
+      },
+      {
+        "requestIndex": 4,
+        "promptId": "ts-short",
+        "language": "typescript",
+        "size": "short",
+        "promptChars": 4336,
+        "ttfbMs": 358.8041999999841,
+        "firstTokenMs": 358.8926999999967,
+        "totalMs": 35929.467199999985,
+        "completionChars": 428
+      },
+      {
+        "requestIndex": 5,
+        "promptId": "py-short",
+        "language": "python",
+        "size": "short",
+        "promptChars": 4622,
+        "ttfbMs": 406.49580000000424,
+        "firstTokenMs": 406.62410000001546,
+        "totalMs": 41405.26019999999,
+        "completionChars": 479
+      },
+      {
+        "requestIndex": 6,
+        "promptId": "ts-short",
+        "language": "typescript",
+        "size": "short",
+        "promptChars": 4336,
+        "ttfbMs": 394.5158999999985,
+        "firstTokenMs": 394.5963000000338,
+        "totalMs": 41668.922699999996,
+        "completionChars": 527
+      },
+      {
+        "requestIndex": 7,
+        "promptId": "py-short",
+        "language": "python",
+        "size": "short",
+        "promptChars": 4622,
+        "ttfbMs": 387.90929999999935,
+        "firstTokenMs": 388.01350000000093,
+        "totalMs": 48355.0294,
+        "completionChars": 479
+      },
+      {
+        "requestIndex": 8,
+        "promptId": "ts-short",
+        "language": "typescript",
+        "size": "short",
+        "promptChars": 4336,
+        "ttfbMs": 343.57380000001285,
+        "firstTokenMs": 343.63710000005085,
+        "totalMs": 43530.69530000002,
+        "completionChars": 536
+      },
+      {
+        "requestIndex": 9,
+        "promptId": "py-short",
+        "language": "python",
+        "size": "short",
+        "promptChars": 4622,
+        "ttfbMs": 370.22080000001006,
+        "firstTokenMs": 370.28210000001127,
+        "totalMs": 41457.120200000005,
+        "completionChars": 479
+      }
+    ]
+  }
+}

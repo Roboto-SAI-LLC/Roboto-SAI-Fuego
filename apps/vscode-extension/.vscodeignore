@@ -1,0 +1,12 @@
+.vscode/**
+node_modules/**
+src/**
+**/*.ts
+**/*.map
+**/*.tsx
+**/tsconfig.json
+**/.DS_Store
+**/npm-debug.log
+**/yarn.lock
+**/bun.lockb
+**/.env

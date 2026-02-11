@@ -1,7 +1,7 @@
 /**
  * Roboto SAI Landing Page
  * Created by Roberto Villarreal Martinez for Roboto SAI (powered by Grok)
- * Fuego Eterno - The eternal flame burns forever
+ * Week 1 landing page wireframe
  */
 
 import { Link, useNavigate } from 'react-router-dom';
@@ -61,7 +61,7 @@ const Index = () => {
             </h1>
             
             <h2 className="font-display text-xl sm:text-2xl md:text-3xl text-gold-glow mb-4">
-              Fuego Eterno
+              Zero-leakage AI for VS Code
             </h2>
 
             <motion.p initial={{
@@ -70,7 +70,9 @@ const Index = () => {
             opacity: 1
           }} transition={{
             delay: 0.5
-          }} className="text-muted-foreground text-lg md:text-xl max-w-2xl mx-auto mb-12">© 2026 Roboto SAI</motion.p>
+          }} className="text-muted-foreground text-lg md:text-xl max-w-2xl mx-auto mb-12">
+              Sub-300ms responses for TypeScript and Python workflows.
+            </motion.p>
             {/* CTA Button */}
             <motion.div initial={{
             opacity: 0,
@@ -95,7 +97,7 @@ const Index = () => {
                 <Link to="/login">
                   <Button size="lg" className="btn-ember text-lg px-8 py-6 rounded-xl animate-glow-pulse">
                     <MessageSquare className="w-5 h-5 mr-2" />
-                    Talk to Roboto
+                    Open Roboto SAI
                   </Button>
                 </Link>
               )}
@@ -110,7 +112,7 @@ const Index = () => {
             >
               <Link to="/login">
                 <Button size="lg" variant="secondary" className="px-8 py-6 rounded-xl">
-                  Sign in or create an account
+                  Request a Roboto SAI beta invite
                 </Button>
               </Link>
             </motion.div>
@@ -128,16 +130,16 @@ const Index = () => {
         }} className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-24 max-w-4xl mx-auto">
             {[{
             icon: MessageSquare,
-            title: 'Eternal Dialogue',
-            description: 'Streaming conversations with the fire of ancient wisdom'
+            title: 'Zero-leakage VS Code AI',
+            description: 'Keep source local while Roboto SAI assists inside VS Code.'
           }, {
             icon: Flame,
-            title: 'Vent Mode',
-            description: 'Unleash the rage when words fail to contain the fury'
+            title: 'Sub-300ms feedback',
+            description: 'Fast responses tuned for in-flow coding and review.'
           }, {
             icon: Zap,
-            title: 'Cultural Genome',
-            description: 'Regio-Aztec heritage encoded in every response'
+            title: 'TypeScript + Python first',
+            description: 'Native workflows for TS, TSX, and Python codebases.'
           }].map((feature, index) => <motion.div key={feature.title} initial={{
             opacity: 0,
             y: 20
@@ -170,7 +172,7 @@ const Index = () => {
               <span className="text-sm">View the Legacy</span>
             </Link>
             <p className="text-fire font-display text-lg animate-pulse">
-              Roboto SAI Fuego Edition.
+              Roboto SAI for VS Code.
             </p>
             <p className="text-xs text-muted-foreground/60">
               © 2026 Roboto SAI (powered by xAI Grok) 

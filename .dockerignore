@@ -20,6 +20,7 @@ build/
 *.swp
 *.swo
 *~
+.SAI_Agents/
 
 # OS
 .DS_Store
@@ -33,6 +34,11 @@ Thumbs.db
 # Testing
 coverage/
 .nyc_output/
+.pytest_cache/
+src/**/*.test.ts
+src/**/*.spec.ts
+src/**/*.test.tsx
+src/**/*.spec.tsx
 
 # Python
 __pycache__/
@@ -48,7 +54,49 @@ ENV/
 backend/venv_linux/
 backend/.venv/
 **/venv/
+backend/venv/
 
 # Misc
 *.log
 .cache/
+*.tar.gz
+.vs/
+.vite-cache/
+build.log
+orbitron/
+.copilotignore
+supabase.tar.gz
+
+# Large irrelevant directories (dev only - exclude from production builds)
+apps/
+packages/
+external_links/
+FutureAdds/
+OrganizePlanning/
+
+# Documentation (keep only essentials)
+**/*.md
+!SECURITY.md
+!LICENSE
+
+# Package manager cache
+.bun/
+.yarn/
+.pnpm/
+.pnpm-debug.log*
+
+# CI/CD and deployment files (not needed in containers)
+.github/
+render.yaml
+render-staging.yaml
+docker-compose.yml
+docker-start.sh
+docker-start.ps1
+run_local.ps1
+run_local.sh
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/

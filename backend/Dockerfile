@@ -1,31 +1,36 @@
-FROM python:3.11-slim
+FROM python:3.11-alpine
 
+# Set environment variables for optimization
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PORT=10000
 
-# Create non-root user
-RUN groupadd -r roboto && useradd -r -g roboto roboto
+# Install system dependencies (Alpine optimized)
+RUN apk add --no-cache \
+    build-base \
+    git \
+    curl \
+    && rm -rf /var/cache/apk/*
+
+# Create non-root user for security
+RUN addgroup -g 1000 -S roboto && \
+    adduser -S -D -H -u 1000 -h /app -s /sbin/nologin -G roboto -g roboto roboto
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    git \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+# Create and activate virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy requirements first
+# Copy requirements first for better caching
 COPY requirements.txt ./
 
-# Install dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
+# Install Python dependencies in virtual environment
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
 
-# Verify SDK integrity (optional - continues if not available)
-RUN python -c "import roboto_sai_sdk; print('SDK integrity verified')" || echo "SDK not required for basic functionality"
-
-# Copy backend code (excluding virtual environments and cache)
+# Copy application code (excluding virtual environments and cache)
 COPY api/ ./api/
 COPY services/ ./services/
 COPY utils/ ./utils/
@@ -33,23 +38,48 @@ COPY *.py ./
 COPY *.txt ./
 COPY *.sql ./
 
-# Set working directory to app (where files are copied)
-WORKDIR /app
-
-# Create data directory
+# Create data directory with proper permissions
 RUN mkdir -p data && chown -R roboto:roboto /app
 
-# Set Python path
-ENV PYTHONPATH=/app
+# Pre-compile Python bytecode for faster startup
+RUN python -m compileall -b .
 
-# Default port (Render overrides via $PORT)
-ENV PORT=5000
+# Add health check endpoint
+RUN echo '#!/bin/bash\n\
+python -c "from main_modular import app; print(\"healthy\")" || exit 1' > /app/healthcheck.sh && \
+    chmod +x /app/healthcheck.sh
 
-# Expose port (Render will override with $PORT)
-EXPOSE 5000
+# Create startup script that handles Render's PORT environment variable
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+# Use PORT from environment (Render sets this)\n\
+PORT=${PORT:-10000}\n\
+\n\
+echo "Starting Roboto SAI Backend on port $PORT"\n\
+\n\
+# Start uvicorn with proper configuration\n\
+exec uvicorn main_modular:app \\\n\
+    --host 0.0.0.0 \\\n\
+    --port $PORT \\\n\
+    --workers 1 \\\n\
+    --loop uvloop \\\n\
+    --http httptools \\\n\
+    --proxy-headers \\\n\
+    --forwarded-allow-ips "*" \\\n\
+    --access-log \\\n\
+    --log-level info' > /app/start.sh && \
+    chmod +x /app/start.sh
+
+# Health check for Render (matches render.yaml healthCheckPath)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD /app/healthcheck.sh
 
 # Switch to non-root user
 USER roboto
 
-# Start with uvicorn using Render's PORT variable
-CMD ["sh", "-c", "uvicorn main_modular:app --host 0.0.0.0 --port ${PORT} --proxy-headers"]
+# Expose the port (Render will override with $PORT)
+EXPOSE 10000
+
+# Use the startup script
+CMD ["/app/start.sh"]

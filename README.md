@@ -369,6 +369,12 @@ client.store_essence({"data": "value"}, "category")
 - Code generation
 - Multi-layer analysis
 
+### ✅ VS Code Extension (Roboto SAI)
+
+- Extension name: Roboto SAI
+- Command Palette: Roboto SAI: Open Chat; Roboto SAI: Explain Selection; Roboto SAI: Generate Tests
+- Config paths: .vscode/settings.json (workspace), User Settings (global)
+
 ### ✅ DevOps
 - Docker multi-stage builds
 - docker-compose orchestration

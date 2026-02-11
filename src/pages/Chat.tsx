@@ -47,8 +47,6 @@ const {
   setLoading,
   toggleVentMode,
   toggleVoiceMode,
-  agentMode,
-  toggleAgentMode,
   getAllConversationsContext,
   loadUserHistory,
   userId: storeUserId
@@ -320,8 +318,6 @@ const {
           onVentToggle={toggleVentMode}
           voiceMode={voiceMode}
           onVoiceToggle={toggleVoiceMode}
-          agentMode={agentMode}
-          onAgentToggle={toggleAgentMode}
         />
 
       </main>

@@ -102,8 +102,7 @@ class GrokLLM(LLM):
         if "response_id" not in result and "id" in result:
             result["response_id"] = result["id"]
         if result.get("success") and not result.get("response_id"):
-            result["success"] = False
-            result["error"] = "Roboto SAI not available: XAI connection failed"
+            logger.warning("Grok returned success without response_id — treating as valid")
         return result
 
     def _invoke_grok_client(
@@ -188,8 +187,8 @@ class GrokLLM(LLM):
         if custom_path:
             return [custom_path.lstrip("/")]
         return [
-            "v1/responses",
             "v1/chat/completions",
+            "v1/responses",
             "v1/messages",
             "chat/completions",
             "responses",
@@ -246,14 +245,14 @@ class GrokLLM(LLM):
         api_key = os.getenv("XAI_API_KEY")
         
         base_url = self._get_xai_base_url()
-        url = f"{base_url}/v1/responses"
+        url = f"{base_url}/v1/chat/completions"
         
         messages = self._build_xai_messages(user_message, roboto_context)
         
         payload = {
             "model": os.getenv("XAI_MODEL", "grok-4-1-fast-reasoning"),
-            "input": messages,
-            "stream": False,
+            "messages": messages,
+            "temperature": 0.7,
         }
         
         headers = {
@@ -368,8 +367,10 @@ class GrokLLM(LLM):
                 headers = {
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
-                    "anthropic-version": "2023-06-01",  # Try with Anthropic header
                 }
+                # Only add Anthropic header for /v1/messages endpoint
+                if url.endswith("/messages"):
+                    headers["anthropic-version"] = "2023-06-01"
                 
                 with httpx.Client(timeout=60.0) as client:
                     response = client.post(url, json=payload, headers=headers)
@@ -531,12 +532,16 @@ class GrokLLM(LLM):
             logger.warning(f"Context too large ({len(roboto_context)} chars), truncating to 200k")
             roboto_context = roboto_context[:200000] + "... (truncated)"
         
-        result = self._invoke_grok_client(
-            user_message=user_message,
-            roboto_context=roboto_context,
-            previous_response_id=kwargs.get("previous_response_id"),
-            emotion=emotion,
-            user_name=user_name,
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: self._invoke_grok_client(
+                user_message=user_message,
+                roboto_context=roboto_context,
+                previous_response_id=kwargs.get("previous_response_id"),
+                emotion=emotion,
+                user_name=user_name,
+            )
         )
 
         logger.info(f"Grok response ID: {result.get('response_id')}")

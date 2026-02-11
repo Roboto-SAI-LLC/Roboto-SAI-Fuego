@@ -1,0 +1,78 @@
+{
+  "name": "roboto-sai",
+  "displayName": "Roboto SAI",
+  "publisher": "roboto-sai",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.86.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Machine Learning"
+  ],
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onLanguage:python",
+    "onCommand:roboto-sai.suggest",
+    "onCommand:roboto-sai.refactor",
+    "onCommand:roboto-sai.generateDocs"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "roboto-sai.suggest",
+        "title": "Roboto SAI: Suggest"
+      },
+      {
+        "command": "roboto-sai.refactor",
+        "title": "Roboto SAI: Refactor"
+      },
+      {
+        "command": "roboto-sai.generateDocs",
+        "title": "Roboto SAI: Generate Docs"
+      }
+    ],
+    "configuration": {
+      "title": "Roboto SAI",
+      "properties": {
+        "roboto-sai.modelPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the local GGUF model for llama-server.exe."
+        },
+        "roboto-sai.port": {
+          "type": "number",
+          "default": 8787,
+          "description": "Local port for llama-server.exe."
+        },
+        "roboto-sai.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional full path to llama-server.exe."
+        },
+        "roboto-sai.serverArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional arguments for llama-server.exe."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "echo No lint configured"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.86.0",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.8"
+  }
+}
