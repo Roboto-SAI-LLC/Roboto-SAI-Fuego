@@ -65,6 +65,9 @@ ENV NODE_ENV=production
 # Copy application code
 COPY . .
 
+# Install full deps for build (vite dev deps required)
+RUN npm ci --legacy-peer-deps && npm cache clean --force
+
 # Build the application
 RUN npm run build && npm prune --production
 
@@ -75,7 +78,8 @@ FROM nginx:alpine AS production
 RUN apk add --no-cache \
     curl \
     gettext \
-    && rm -rf /var/cache/apk/*
+    && rm -rf /var/cache/apk/* \
+    && chmod 777 /etc/nginx/conf.d
 
 # Create nginx user and directories (skip if already exists)
 RUN addgroup -g 1000 -S nginx 2>/dev/null || true && \
@@ -87,7 +91,7 @@ COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 # Copy optimized nginx configuration template for Render (with placeholder for port)
 COPY <<'EOF' /etc/nginx/conf.d/default.conf.template
 server {
-    listen __PORT__;  # Placeholder for Render's PORT
+    listen ${PORT:-10000};  # Dynamic port substitution via envsubst
     server_name _;
     root /usr/share/nginx/html;
     index index.html;
@@ -166,6 +170,15 @@ http { \
 # Health check for Render
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:10000/health || exit 1
+
+# Create entrypoint script to substitute PORT and start nginx (as root)
+RUN echo '#!/bin/sh\n\
+set -e\n\
+\n# Substitute PORT in nginx config\n\
+envsubst < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf\n\
+\n# Start nginx\n\
+exec nginx -g "daemon off;"' > /entrypoint.sh && \
+    chmod +x /entrypoint.sh
 
 # Switch to non-root user for security
 USER nginx
