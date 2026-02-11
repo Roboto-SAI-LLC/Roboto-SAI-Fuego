@@ -37,12 +37,7 @@ $ErrorActionPreference = 'Stop'
 $RulePrefix = 'Roboto SAI'
 $RuleGroup = 'Roboto SAI'
 $LoopbackAddresses = @('127.0.0.1', '::1')
-$NonLoopbackRanges = @(
-  '0.0.0.0-126.255.255.255',
-  '127.0.0.2-127.255.255.255',
-  '128.0.0.0-255.255.255.255',
-  '::2-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff'
-)
+# For blocking, we'll use 'Internet' keyword which means "anything not local"
 
 $script:ExpectedRules = @()
 
@@ -99,7 +94,7 @@ function Resolve-ExecutablePath {
     if (-not $commandName) {
       continue
     }
-    $command = Get-Command -Name $commandName -CommandType Application -ErrorAction SilentlyContinue
+    $command = Get-Command -Name $commandName -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($command -and $command.Source) {
       return (Resolve-Path -Path $command.Source).Path
     }
@@ -144,8 +139,8 @@ function Add-ExpectedRule {
     [string]$Direction,
     [string]$Action,
     [string]$Program,
-    [string[]]$RemoteAddress,
-    [string[]]$LocalAddress
+    $RemoteAddress,
+    $LocalAddress
   )
 
   $script:ExpectedRules += [pscustomobject]@{
@@ -164,8 +159,8 @@ function New-RobotoRule {
     [string]$Direction,
     [string]$Action,
     [string]$Program,
-    [string[]]$RemoteAddress,
-    [string[]]$LocalAddress
+    $RemoteAddress,
+    $LocalAddress
   )
 
   $params = @{
@@ -179,11 +174,19 @@ function New-RobotoRule {
   }
 
   if ($RemoteAddress) {
-    $params.RemoteAddress = ($RemoteAddress -join ',')
+    if ($RemoteAddress -is [array]) {
+      $params.RemoteAddress = ($RemoteAddress -join ',')
+    } else {
+      $params.RemoteAddress = $RemoteAddress
+    }
   }
 
   if ($LocalAddress) {
-    $params.LocalAddress = ($LocalAddress -join ',')
+    if ($LocalAddress -is [array]) {
+      $params.LocalAddress = ($LocalAddress -join ',')
+    } else {
+      $params.LocalAddress = $LocalAddress
+    }
   }
 
   New-NetFirewallRule @params | Out-Null
@@ -213,23 +216,32 @@ function Apply-ProgramRules {
   New-RobotoRule -DisplayName $allowInbound -Direction 'Inbound' -Action 'Allow' -Program $ProgramPath -RemoteAddress $LoopbackAddresses -LocalAddress $LoopbackAddresses
   Add-ExpectedRule -DisplayName $allowInbound -Direction 'Inbound' -Action 'Allow' -Program $ProgramPath -RemoteAddress $LoopbackAddresses -LocalAddress $LoopbackAddresses
 
-  New-RobotoRule -DisplayName $blockInbound -Direction 'Inbound' -Action 'Block' -Program $ProgramPath -RemoteAddress $NonLoopbackRanges -LocalAddress @('Any')
-  Add-ExpectedRule -DisplayName $blockInbound -Direction 'Inbound' -Action 'Block' -Program $ProgramPath -RemoteAddress $NonLoopbackRanges -LocalAddress @('Any')
+  New-RobotoRule -DisplayName $blockInbound -Direction 'Inbound' -Action 'Block' -Program $ProgramPath -RemoteAddress @('Internet') -LocalAddress 'Any'
+  Add-ExpectedRule -DisplayName $blockInbound -Direction 'Inbound' -Action 'Block' -Program $ProgramPath -RemoteAddress @('Internet') -LocalAddress 'Any'
 
-  New-RobotoRule -DisplayName $allowOutbound -Direction 'Outbound' -Action 'Allow' -Program $ProgramPath -RemoteAddress $LoopbackAddresses -LocalAddress @('Any')
-  Add-ExpectedRule -DisplayName $allowOutbound -Direction 'Outbound' -Action 'Allow' -Program $ProgramPath -RemoteAddress $LoopbackAddresses -LocalAddress @('Any')
+  New-RobotoRule -DisplayName $allowOutbound -Direction 'Outbound' -Action 'Allow' -Program $ProgramPath -RemoteAddress $LoopbackAddresses -LocalAddress 'Any'
+  Add-ExpectedRule -DisplayName $allowOutbound -Direction 'Outbound' -Action 'Allow' -Program $ProgramPath -RemoteAddress $LoopbackAddresses -LocalAddress 'Any'
 
-  New-RobotoRule -DisplayName $blockOutbound -Direction 'Outbound' -Action 'Block' -Program $ProgramPath -RemoteAddress $NonLoopbackRanges -LocalAddress @('Any')
-  Add-ExpectedRule -DisplayName $blockOutbound -Direction 'Outbound' -Action 'Block' -Program $ProgramPath -RemoteAddress $NonLoopbackRanges -LocalAddress @('Any')
+  New-RobotoRule -DisplayName $blockOutbound -Direction 'Outbound' -Action 'Block' -Program $ProgramPath -RemoteAddress @('Internet') -LocalAddress 'Any'
+  Add-ExpectedRule -DisplayName $blockOutbound -Direction 'Outbound' -Action 'Block' -Program $ProgramPath -RemoteAddress @('Internet') -LocalAddress 'Any'
 }
 
 function Test-AddressSubset {
   param(
     [string[]]$Actual,
-    [string[]]$Required
+    $Required
   )
 
-  if (-not $Required -or $Required.Count -eq 0) {
+  if (-not $Required) {
+    return $true
+  }
+
+  # If Required is a simple string like 'Any' or 'Internet', just check if it's in Actual
+  if ($Required -is [string]) {
+    return ($Actual -contains $Required)
+  }
+
+  if ($Required -is [array] -and $Required.Count -eq 0) {
     return $true
   }
 

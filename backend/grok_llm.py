@@ -81,7 +81,7 @@ class GrokLLM(LLM):
                     return sub_loop.run_until_complete(self._acall(prompt, stop, run_manager, **kwargs))
                 finally:
                     sub_loop.close()
-            return asyncio.get_event_loop().run_in_executor(None, safe_acall())
+            return asyncio.get_event_loop().run_in_executor(None, safe_acall)
         except RuntimeError as e:
             if "no running event loop" not in str(e).lower():
                 raise

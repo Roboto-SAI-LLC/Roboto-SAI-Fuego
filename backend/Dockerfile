@@ -13,9 +13,9 @@ RUN apk add --no-cache \
     curl \
     && rm -rf /var/cache/apk/*
 
-# Create non-root user for security
-RUN addgroup -g 1000 -S roboto && \
-    adduser -S -D -H -u 1000 -h /app -s /sbin/nologin -G roboto -g roboto roboto
+# Create non-root user for security (skip if already exists)
+RUN addgroup -g 1000 -S roboto 2>/dev/null || true && \
+    adduser -S -D -H -u 1000 -h /app -s /sbin/nologin -G roboto -g roboto roboto 2>/dev/null || true
 
 WORKDIR /app
 

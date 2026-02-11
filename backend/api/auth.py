@@ -171,10 +171,11 @@ async def request_magic_link(
 ):
     """Request a magic link for passwordless login"""
     try:
+        redirect_url = os.getenv("FRONTEND_ORIGIN", "http://localhost:8080").rstrip("/") + "/auth/callback"
         await supabase.auth.sign_in_with_otp({
             "email": magic_data.email,
             "options": {
-                "emailRedirectTo": "http://localhost:8080/auth/callback"
+                "emailRedirectTo": redirect_url
             }
         })
 

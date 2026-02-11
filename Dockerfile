@@ -11,11 +11,11 @@ RUN apk add --no-cache \
     py3-pip \
     build-base \
     git \
-    && ln -s /usr/bin/python3 /usr/bin/python \
+    && ln -sf /usr/bin/python3 /usr/bin/python \
     && python -m venv /opt/venv \
     && /opt/venv/bin/python -m pip install --upgrade pip setuptools wheel \
     && /opt/venv/bin/pip install --no-cache-dir uv \
-    && ln -s /opt/venv/bin/uvx /usr/local/bin/uvx
+    && ln -sf /opt/venv/bin/uvx /usr/local/bin/uvx
 
 # Ensure virtualenv binaries are on PATH
 ENV PATH="/opt/venv/bin:$PATH"
@@ -73,9 +73,9 @@ RUN apk add --no-cache \
     curl \
     && rm -rf /var/cache/apk/*
 
-# Create nginx user and directories
-RUN addgroup -g 1000 -S nginx && \
-    adduser -S -D -H -u 1000 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx
+# Create nginx user and directories (skip if already exists)
+RUN addgroup -g 1000 -S nginx 2>/dev/null || true && \
+    adduser -S -D -H -u 1000 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx 2>/dev/null || true
 
 # Copy built files from build stage
 COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html

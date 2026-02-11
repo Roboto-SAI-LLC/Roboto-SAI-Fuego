@@ -27,10 +27,16 @@ export const RequireAuth = ({ children }: RequireAuthProps) => {
     }
 
     (async () => {
-      const ok = await refreshSession();
-      if (!active) return;
-      setChecked(true);
-      if (!ok) {
+      try {
+        const ok = await refreshSession();
+        if (!active) return;
+        setChecked(true);
+        if (!ok) {
+          navigate('/login', { replace: true });
+        }
+      } catch {
+        if (!active) return;
+        setChecked(true);
         navigate('/login', { replace: true });
       }
     })();

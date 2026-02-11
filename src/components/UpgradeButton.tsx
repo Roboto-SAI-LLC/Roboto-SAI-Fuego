@@ -17,15 +17,15 @@ export const UpgradeButton = () => {
         setLoading(true);
         try {
             // Call backend to create session - backend returns the checkout URL
-            const response = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/create-checkout-session`, {
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ""}/api/create-checkout-session`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
                 credentials: "include",
                 body: JSON.stringify({
-                    success_url: window.location.origin + "/chat?success=true",
-                    cancel_url: window.location.origin + "/chat?canceled=true",
+                    success_url: window.location.origin + "/#/chat?success=true",
+                    cancel_url: window.location.origin + "/#/chat?canceled=true",
                 }),
             });
 

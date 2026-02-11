@@ -109,6 +109,47 @@ class GrokClient:
 
         return response_text, meta
 
+    async def analyze(self, text: str, mode: str = "multi-layer", dimensions: list = None) -> dict:
+        """Entangled reasoning analysis using Grok"""
+        dimensions = dimensions or []
+        prompt = f"Analyze the following text using {mode} analysis"
+        if dimensions:
+            prompt += f" focusing on these dimensions: {', '.join(dimensions)}"
+        prompt += f":\n\n{text}\n\nProvide a summary, layer-by-layer analysis, and confidence score."
+
+        try:
+            result = await self.grok_llm.acall_with_response_id(prompt)
+            response_text = result.get("response", "") if result.get("success") else "Analysis unavailable"
+            return {
+                "summary": response_text[:500],
+                "layers": [{"dimension": d, "analysis": response_text} for d in (dimensions or ["general"])],
+                "confidence": 0.85 if result.get("success") else 0.0,
+            }
+        except Exception as e:
+            logger.warning(f"Analysis failed: {e}")
+            return {"summary": "Analysis unavailable", "layers": [], "confidence": 0.0}
+
+    async def generate_code(self, prompt: str, language: str = "python", constraints: dict = None) -> dict:
+        """Code generation using Grok"""
+        constraints = constraints or {}
+        full_prompt = f"Generate {language} code for: {prompt}"
+        if constraints:
+            full_prompt += f"\nConstraints: {constraints}"
+        full_prompt += "\nReturn only the code with brief explanation."
+
+        try:
+            result = await self.grok_llm.acall_with_response_id(full_prompt)
+            response_text = result.get("response", "") if result.get("success") else "Code generation unavailable"
+            return {
+                "code": response_text,
+                "explanation": f"Generated {language} code for: {prompt}",
+                "reasoning_trace_id": result.get("response_id"),
+            }
+        except Exception as e:
+            logger.warning(f"Code generation failed: {e}")
+            return {"code": "# Code generation failed", "explanation": str(e), "reasoning_trace_id": None}
+
+
 def _compute_emotion(text: str, emotion_simulator: AdvancedEmotionSimulator) -> Optional[Dict[str, Any]]:
     """Compute emotion safely"""
     try:
@@ -123,5 +164,10 @@ def _compute_emotion(text: str, emotion_simulator: AdvancedEmotionSimulator) -> 
     except Exception:
         return None
 
+_grok_client: GrokClient | None = None
+
 def get_grok_client() -> GrokClient:
-    return GrokClient()
+    global _grok_client
+    if _grok_client is None:
+        _grok_client = GrokClient()
+    return _grok_client

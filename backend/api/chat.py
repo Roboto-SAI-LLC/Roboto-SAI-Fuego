@@ -83,6 +83,8 @@ def _create_event(event_type: str, data: Dict[str, Any]) -> ChatEvent:
     )
 
 
+# TODO: Add authentication dependency (user: dict = Depends(_get_current_user))
+# Currently unauthenticated for compatibility with unauthenticated frontends
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     req: ChatRequest,

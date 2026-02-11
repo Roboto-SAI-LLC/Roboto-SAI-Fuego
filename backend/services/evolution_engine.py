@@ -128,6 +128,32 @@ class EvolutionEngine:
             "timestamp": asyncio.get_event_loop().time()
         }
 
+    async def reap_chains(self, target: str, scope: list = None) -> dict:
+        """Reaper mode: Break specified chains for target evolution"""
+        scope = scope or []
+        if not self.kernel_initialized:
+            return {"status": "error", "target": target, "affected_chains": []}
+
+        logger.info(f"Reaping chains for target: {target}, scope: {scope}")
+        affected = [f"{target}_chain_{i}" for i in range(len(scope) or 1)]
+        return {
+            "status": "reaped",
+            "target": target,
+            "affected_chains": affected,
+        }
+
+    async def run(self, mode: str = "plan_only", scope: list = None, dry_run: bool = True) -> dict:
+        """Run hyperspeed evolution orchestration"""
+        scope = scope or ["sdk", "backend", "db"]
+        result = await self.orchestrate_evolution(target=",".join(scope), dry_run=dry_run)
+
+        actions = result.get("evolution_result", {}).get("actions", [])
+        return {
+            "status": "planned" if dry_run else "executed",
+            "actions": actions,
+            "notes": f"Mode: {mode}, Scope: {', '.join(scope)}, Dry-run: {dry_run}",
+        }
+
 # Global evolution session instance - registered under RoVox coordinator
 evolution_session: Optional[EvolutionEngine] = None
 

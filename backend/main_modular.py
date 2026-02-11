@@ -54,15 +54,21 @@ async def lifespan(app: FastAPI):
     """Application lifespan management"""
     logger.info("🚀 Starting Roboto SAI 2026 Modular Backend...")
     
-    # Initialize quantum kernel
-    logger.info("🔬 Initializing quantum kernel...")
-    quantum_kernel = initialize_quantum_kernel()
-    logger.info("✅ Quantum kernel initialized")
+    try:
+        # Initialize quantum kernel
+        logger.info("🔬 Initializing quantum kernel...")
+        quantum_kernel = initialize_quantum_kernel()
+        logger.info("✅ Quantum kernel initialized")
+    except Exception as e:
+        logger.error(f"❌ Quantum kernel initialization failed: {e}")
     
-    # Initialize evolution kernel
-    logger.info("🧬 Initializing evolution kernel...")
-    evolution_kernel = initialize_evolution_kernel()
-    logger.info("✅ Evolution kernel initialized")
+    try:
+        # Initialize evolution kernel
+        logger.info("🧬 Initializing evolution kernel...")
+        evolution_kernel = initialize_evolution_kernel()
+        logger.info("✅ Evolution kernel initialized")
+    except Exception as e:
+        logger.error(f"❌ Evolution kernel initialization failed: {e}")
     
     yield
     logger.info("🛑 Shutting down Roboto SAI 2026 Modular Backend...")

@@ -26,13 +26,22 @@ async def essence_store(
     req: EssenceStoreRequest,
     store: EssenceStore = Depends(get_essence_session),
 ):
-    record = await store.store_essence(
-        essence=req.essence,
+    if store is None:
+        raise HTTPException(status_code=503, detail="Essence store not initialized")
+    import json
+    record = store.store_essence(
+        data=json.dumps(req.essence),
         category=req.category,
-        tags=req.tags or [],
-        workspace_id=req.workspace_id,
+        tags=req.tags,
     )
-    return EssenceStoreResponse(**record)
+    if not record.get("success"):
+        raise HTTPException(status_code=500, detail=record.get("error", "Store failed"))
+    return EssenceStoreResponse(
+        id=record.get("essence_id", "unknown"),
+        category=record.get("category", req.category),
+        stored_at=str(record.get("timestamp", "")),
+        embedding_id=None,
+    )
 
 @router.get("/essence/retrieve", response_model=EssenceRetrieveResponse)
 async def essence_retrieve(
@@ -41,9 +50,11 @@ async def essence_retrieve(
     limit: int = 20,
     store: EssenceStore = Depends(get_essence_session),
 ):
-    items = await store.retrieve_essence(
-        category=category,
-        workspace_id=workspace_id,
+    if store is None:
+        raise HTTPException(status_code=503, detail="Essence store not initialized")
+    items = store.retrieve_essence(
+        category=category or "general",
+        tags=None,
         limit=limit,
     )
     return EssenceRetrieveResponse(items=items)
