@@ -68,7 +68,8 @@ exec uvicorn main_modular:app \\\n\
     --proxy-headers \\\n\
     --forwarded-allow-ips "*" \\\n\
     --access-log \\\n\
-    --log-level info' > /app/start.sh && \
+    --log-level info \\\n\
+    --reload=false' > /app/start.sh && \
     chmod +x /app/start.sh
 
 # Health check for Render (matches render.yaml healthCheckPath)

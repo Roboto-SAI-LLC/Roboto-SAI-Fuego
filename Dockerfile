@@ -34,6 +34,9 @@ FROM base AS development
 # Set development environment
 ENV NODE_ENV=development
 
+# Install ALL dependencies (including devDependencies for Vite)
+RUN npm ci --legacy-peer-deps && npm cache clean --force
+
 # Copy application code
 COPY . .
 
@@ -80,10 +83,10 @@ RUN addgroup -g 1000 -S nginx 2>/dev/null || true && \
 # Copy built files from build stage
 COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 
-# Copy optimized nginx configuration for Render
-COPY <<'EOF' /etc/nginx/conf.d/default.conf
+# Copy optimized nginx configuration template for Render (with placeholder for port)
+COPY <<'EOF' /etc/nginx/conf.d/default.conf.template
 server {
-    listen 10000;  # Render's internal port, will be mapped externally
+    listen __PORT__;  # Placeholder for Render's PORT
     server_name _;
     root /usr/share/nginx/html;
     index index.html;
@@ -167,5 +170,16 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 USER nginx
 
 EXPOSE 10000
+
+# Create entrypoint script to substitute PORT and start nginx
+RUN echo '#!/bin/sh\n\
+set -e\n\
+\n\
+# Substitute PORT in nginx config\n\
+envsubst < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf\n\
+\n\
+# Start nginx\n\
+exec nginx -g "daemon off;"' > /entrypoint.sh && \
+    chmod +x /entrypoint.sh
 
 CMD ["nginx", "-g", "daemon off;"]

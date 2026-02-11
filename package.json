@@ -7,7 +7,6 @@
     "dev": "vite",
     "local": "powershell ./run_local.ps1",
     "build": "vite build",
-
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -84,6 +83,7 @@
     "@types/react": "^19.0.0-rc-1d1f1b2b14-20240621",
     "@types/react-dom": "^19.0.0-rc-1d1f1b2b14-20240621",
     "@vitejs/plugin-react-swc": "^3.11.0",
+    "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.32.0",

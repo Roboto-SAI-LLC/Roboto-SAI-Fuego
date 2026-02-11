@@ -894,10 +894,19 @@ async def perform_roaming(
         logger.error(f"Roaming action failed: {e}")
         raise HTTPException(status_code=500, detail="Roaming action failed due to an internal server error.")
 
-# Extend chat to detect roaming commands
-# In chat_with_grok, before calling grok, check for roaming commands
+# Chat Endpoint  
+@app.post("/api/chat", tags=["Chat"])
+@limiter.limit("30/minute")
+async def chat_with_grok(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    chat_request: ChatMessage,
+    user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
     """
-    Chat with xAI Grok using Roboto SAI context with LangChain memory
+    Chat with xAI Grok using Roboto SAI context with LangChain memory.
+    
+    Auto-triggers conversation summarization after 20 messages or 10 minutes of activity.
     """
     # Check if Grok is available
     has_api_key = bool(os.getenv("XAI_API_KEY"))
@@ -979,6 +988,10 @@ async def perform_roaming(
         
         await cache_delete(f"chat:history:{user['id']}:{session_id}")
         await cache_delete(f"chat:history:{user['id']}:all")
+
+        # Trigger auto-summarization check (demo mode)
+        if roboto_message_id:
+            await _maybe_trigger_auto_summarization(user['id'], session_id, background_tasks)
 
         return {
             "success": True,
@@ -1066,6 +1079,10 @@ async def perform_roaming(
         await cache_delete(f"chat:history:{user['id']}:{session_id}")
         await cache_delete(f"chat:history:{user['id']}:all")
 
+        # Trigger auto-summarization check (after 20 messages or 10 min activity)
+        if roboto_message_id:
+            await _maybe_trigger_auto_summarization(user['id'], session_id, background_tasks)
+
         return {
             "success": True,
             "response": response_text,
@@ -1094,32 +1111,103 @@ async def perform_roaming(
 async def get_chat_history(
     request: Request,
     session_id: Optional[str] = None,
+    role: Optional[str] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
     limit: int = 50,
+    cursor: Optional[str] = None,
     user: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """Retrieve recent chat history."""
+    """
+    Retrieve chat history with keyset pagination and filters.
+    
+    Query params:
+    - session_id: Filter by session (optional)
+    - role: Filter by role (user/roboto/assistant) (optional)
+    - since: Filter messages after this timestamp (ISO format) (optional)
+    - until: Filter messages before this timestamp (ISO format) (optional)
+    - limit: Max messages per page (default 50, max 200)
+    - cursor: Pagination cursor from previous response (optional)
+    
+    Returns paginated messages with next_cursor for pagination.
+    """
     supabase = get_supabase_client()
     if supabase is None:
         return {
             "success": True,
             "count": 0,
             "messages": [],
+            "next_cursor": None,
             "timestamp": datetime.now().isoformat(),
         }
 
-    cache_key = None
-    if limit == 50:
-        cache_key = f"chat:history:{user['id']}:{session_id or 'all'}"
-        cached = await cache_get(cache_key)
-        if cached:
-            cached["cached"] = True
-            return cached
-
-    query = supabase.table('messages').select('*').eq('user_id', user['id']).order('created_at', desc=True).limit(limit)
+    # Validate and cap limit
+    limit = min(max(1, limit), 200)
+    
+    # Decode cursor (base64 encoded: "timestamp,id")
+    cursor_created_at = None
+    cursor_id = None
+    if cursor:
+        try:
+            import base64
+            decoded = base64.b64decode(cursor).decode('utf-8')
+            cursor_created_at, cursor_id = decoded.split(',', 1)
+        except Exception as e:
+            logger.warning(f"Invalid cursor: {e}")
+            raise HTTPException(status_code=400, detail="Invalid cursor format")
+    
+    # Build query with filters
+    query = supabase.table('messages').select('*').eq('user_id', user['id'])
+    
     if session_id:
         query = query.eq('session_id', session_id)
+    
+    if role:
+        if role not in ('user', 'roboto', 'assistant'):
+            raise HTTPException(status_code=400, detail="Invalid role. Must be user, roboto, or assistant")
+        query = query.eq('role', role)
+    
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since.replace('Z', '+00:00'))
+            query = query.gte('created_at', since_dt.isoformat())
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid 'since' timestamp format. Use ISO 8601")
+    
+    if until:
+        try:
+            until_dt = datetime.fromisoformat(until.replace('Z', '+00:00'))
+            query = query.lte('created_at', until_dt.isoformat())
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid 'until' timestamp format. Use ISO 8601")
+    
+    # Apply cursor-based pagination (keyset pagination)
+    if cursor_created_at and cursor_id:
+        # Fetch messages older than cursor (created_at < cursor OR (created_at = cursor AND id < cursor_id))
+        # Supabase doesn't support OR directly, so we do it in two queries
+        query = query.or_(
+            f"created_at.lt.{cursor_created_at},and(created_at.eq.{cursor_created_at},id.lt.{cursor_id})"
+        )
+    
+    # Order and limit (using pagination index)
+    query = query.order('created_at', desc=True).order('id', desc=True).limit(limit + 1)  # Fetch +1 to check if more exist
+    
     result = await run_supabase_async(query.execute)
     messages = result.data or []
+    
+    # Check if there are more messages
+    has_more = len(messages) > limit
+    if has_more:
+        messages = messages[:limit]  # Remove extra message
+    
+    # Generate next cursor if more messages exist
+    next_cursor = None
+    if has_more and messages:
+        last_msg = messages[-1]
+        import base64
+        cursor_str = f"{last_msg['created_at']},{last_msg['id']}"
+        next_cursor = base64.b64encode(cursor_str.encode('utf-8')).decode('utf-8')
+    
     response = {
         "success": True,
         "count": len(messages),
@@ -1137,11 +1225,10 @@ async def get_chat_history(
             }
             for msg in messages
         ],
+        "next_cursor": next_cursor,
+        "has_more": has_more,
         "timestamp": datetime.now().isoformat(),
     }
-
-    if cache_key:
-        await cache_set(cache_key, response, ttl=300)
 
     return response
 
@@ -1341,6 +1428,334 @@ async def submit_feedback(
         "message": "Feedback recorded. The eternal flame adapts.",
         "timestamp": datetime.now().isoformat(),
     }
+
+
+# Session Management Endpoints
+@app.get("/api/sessions", tags=["Sessions"])
+@limiter.limit("60/minute")
+async def list_sessions(
+    request: Request,
+    limit: int = 50,
+    offset: int = 0,
+    user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    List unique sessions for authenticated user with metadata.
+    
+    Returns:
+    - session_id: Unique session identifier
+    - last_message_time: Timestamp of last message
+    - message_count: Total messages in session
+    - summary_preview: First 200 chars of rollup summary (if available)
+    
+    Ordered by most recent activity.
+    """
+    supabase = get_supabase_client()
+    if supabase is None:
+        return {
+            "success": True,
+            "count": 0,
+            "sessions": [],
+            "timestamp": datetime.now().isoformat(),
+        }
+    
+    # Use RPC to aggregate sessions efficiently
+    # Query messages and group by session_id
+    query = supabase.table('messages').select('session_id, created_at').eq('user_id', user['id']).order('created_at', desc=True)
+    result = await run_supabase_async(query.execute)
+    messages = result.data or []
+    
+    # Group messages by session_id
+    sessions_map: Dict[str, Dict[str, Any]] = {}
+    for msg in messages:
+        sid = msg['session_id']
+        created_at = msg['created_at']
+        
+        if sid not in sessions_map:
+            sessions_map[sid] = {
+                'session_id': sid,
+                'last_message_time': created_at,
+                'message_count': 0,
+                'summary_preview': None,
+            }
+        
+        sessions_map[sid]['message_count'] += 1
+        
+        # Update last_message_time if this message is more recent
+        if created_at > sessions_map[sid]['last_message_time']:
+            sessions_map[sid]['last_message_time'] = created_at
+    
+    # Get rollup summaries for sessions with previews
+    if sessions_map:
+        session_ids = list(sessions_map.keys())
+        rollups_query = supabase.table('conversation_rollups').select('session_id, summary').eq('user_id', user['id']).in_('session_id', session_ids)
+        rollups_result = await run_supabase_async(rollups_query.execute)
+        rollups = rollups_result.data or []
+        
+        for rollup in rollups:
+            sid = rollup['session_id']
+            if sid in sessions_map and rollup['summary']:
+                sessions_map[sid]['summary_preview'] = rollup['summary'][:200]
+    
+    # Convert to list and sort by last_message_time (descending)
+    sessions = list(sessions_map.values())
+    sessions.sort(key=lambda x: x['last_message_time'], reverse=True)
+    
+    # Apply pagination
+    total_count = len(sessions)
+    sessions_page = sessions[offset:offset + limit]
+    
+    return {
+        "success": True,
+        "count": len(sessions_page),
+        "total": total_count,
+        "sessions": sessions_page,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+# Conversation Rollup Endpoints
+@app.get("/api/conversations/rollup", tags=["Conversations"])
+@limiter.limit("60/minute")
+async def get_conversation_rollup(
+    request: Request,
+    session_id: str,
+    user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Get current conversation rollup summary for a session.
+    
+    Returns rollup fields:
+    - summary: Generated summary text
+    - key_topics: Array of key topics
+    - sentiment: Overall sentiment (positive/negative/neutral/mixed)
+    - sentiment_score: Numeric score (-1 to 1)
+    - covered_until_created_at: Timestamp of last covered message
+    - message_count: Number of messages in rollup
+    - updated_at: Last update timestamp
+    """
+    supabase = get_supabase_client()
+    if supabase is None:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+    
+    # Query conversation_rollups table
+    result = await run_supabase_async(
+        lambda: supabase.table('conversation_rollups')
+            .select('user_id, session_id, summary, key_topics, sentiment, sentiment_score, covered_until_created_at, message_count, updated_at')
+            .eq('user_id', user['id'])
+            .eq('session_id', session_id)
+            .execute()
+    )
+    
+    rollup = result.data[0] if result.data else None
+    if not rollup:
+        raise HTTPException(status_code=404, detail=f"No rollup found for session: {session_id}")
+    
+    return {
+        "success": True,
+        "rollup": rollup,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@app.post("/api/conversations/summarize", tags=["Conversations"])
+@limiter.limit("20/minute")
+async def create_conversation_rollup(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    session_id: str,
+    message_limit: int = 50,
+    force: bool = False,
+    user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Manually trigger conversation summarization.
+    
+    Creates or updates a rollup in conversation_rollups table.
+    Uses Grok to generate summary from recent messages.
+    
+    Query params:
+    - session_id: Session to summarize
+    - message_limit: Max messages to include (default 50, max 200)
+    - force: Force re-summarization even if recent rollup exists
+    
+    Background: Auto-triggered after 20 new messages.
+    """
+    supabase = get_supabase_client()
+    if supabase is None:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+    
+    # Validate message_limit
+    message_limit = min(max(1, message_limit), 200)
+    
+    # Check if rollup already exists and is recent
+    if not force:
+        existing_result = await run_supabase_async(
+            lambda: supabase.table('conversation_rollups')
+                .select('covered_until_created_at, message_count, updated_at')
+                .eq('user_id', user['id'])
+                .eq('session_id', session_id)
+                .execute()
+        )
+        
+        if existing_result.data:
+            existing = existing_result.data[0]
+            updated_at = datetime.fromisoformat(existing['updated_at'].replace('Z', '+00:00'))
+            
+            # If updated within last 10 minutes, skip
+            if (datetime.now(timezone.utc) - updated_at).total_seconds() < 600:
+                return {
+                    "success": True,
+                    "message": "Rollup is recent, skipping. Use force=true to override.",
+                    "rollup": existing,
+                    "timestamp": datetime.now().isoformat(),
+                }
+    
+    # Fetch messages for summarization
+    query = supabase.table('messages').select('role, content, created_at').eq('user_id', user['id']).eq('session_id', session_id).order('created_at', desc=True).limit(message_limit)
+    result = await run_supabase_async(query.execute)
+    messages = list(reversed(result.data or []))  # Reverse to chronological order
+    
+    if not messages:
+        raise HTTPException(status_code=404, detail=f"No messages found for session: {session_id}")
+    
+    # Generate summary using Grok
+    summary_data = await _generate_summary_from_messages(messages, user.get('display_name') or 'user')
+    
+    # Prepare rollup data
+    covered_until = messages[-1]['created_at']
+    rollup_data = {
+        'user_id': user['id'],
+        'session_id': session_id,
+        'summary': summary_data.get('summary', ''),
+        'key_topics': summary_data.get('key_topics', []),
+        'sentiment': summary_data.get('sentiment', 'neutral'),
+        'sentiment_score': summary_data.get('sentiment_score', 0.0),
+        'covered_until_created_at': covered_until,
+        'message_count': len(messages),
+        'updated_at': datetime.now(timezone.utc).isoformat(),
+    }
+    
+    # Upsert rollup (insert or update)
+    upsert_result = await run_supabase_async(
+        lambda: supabase.table('conversation_rollups')
+            .upsert(rollup_data, on_conflict='user_id,session_id')
+            .execute()
+    )
+    
+    rollup_row = upsert_result.data[0] if upsert_result.data else rollup_data
+    
+    # Clear cache
+    await cache_delete(f"rollup:{user['id']}:{session_id}")
+    
+    return {
+        "success": True,
+        "rollup": rollup_row,
+        "messages_summarized": len(messages),
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+async def _maybe_trigger_auto_summarization(user_id: str, session_id: str, background_tasks: BackgroundTasks) -> None:
+    """
+    Check if auto-summarization should be triggered for a session.
+    
+    Triggers after:
+    - 20 new messages since last rollup
+    - OR 10 minutes of activity since last rollup
+    
+    Called after each message is saved.
+    """
+    try:
+        supabase = get_supabase_client()
+        if not supabase:
+            return
+        
+        # Get existing rollup
+        rollup_result = await run_supabase_async(
+            lambda: supabase.table('conversation_rollups')
+                .select('covered_until_created_at, message_count, updated_at')
+                .eq('user_id', user_id)
+                .eq('session_id', session_id)
+                .execute()
+        )
+        
+        last_covered = None
+        if rollup_result.data:
+            last_covered = rollup_result.data[0]['covered_until_created_at']
+        
+        # Count new messages since last rollup
+        messages_query = supabase.table('messages').select('id, created_at', count='exact').eq('user_id', user_id).eq('session_id', session_id)
+        if last_covered:
+            messages_query = messages_query.gt('created_at', last_covered)
+        
+        messages_result = await run_supabase_async(messages_query.execute)
+        new_message_count = messages_result.count or 0
+        
+        # Trigger if 20+ new messages
+        if new_message_count >= 20:
+            logger.info(f"Auto-triggering summarization for session {session_id} (20+ new messages)")
+            # Schedule background task
+            background_tasks.add_task(_background_summarize, user_id, session_id)
+            return
+        
+        # Check if 10+ minutes of activity
+        if rollup_result.data and messages_result.data:
+            first_new_msg = messages_result.data[0]
+            first_new_time = datetime.fromisoformat(first_new_msg['created_at'].replace('Z', '+00:00'))
+            now = datetime.now(timezone.utc)
+            
+            if (now - first_new_time).total_seconds() >= 600:  # 10 minutes
+                logger.info(f"Auto-triggering summarization for session {session_id} (10+ minutes activity)")
+                background_tasks.add_task(_background_summarize, user_id, session_id)
+                return
+        
+    except Exception as e:
+        logger.warning(f"Auto-summarization check failed: {e}")
+
+
+async def _background_summarize(user_id: str, session_id: str) -> None:
+    """Background task to generate conversation rollup."""
+    try:
+        supabase = get_supabase_client()
+        if not supabase:
+            return
+        
+        # Fetch recent messages
+        query = supabase.table('messages').select('role, content, created_at').eq('user_id', user_id).eq('session_id', session_id).order('created_at', desc=True).limit(50)
+        result = await run_supabase_async(query.execute)
+        messages = list(reversed(result.data or []))
+        
+        if not messages:
+            return
+        
+        # Generate summary
+        summary_data = await _generate_summary_from_messages(messages, 'user')
+        
+        # Prepare rollup data
+        rollup_data = {
+            'user_id': user_id,
+            'session_id': session_id,
+            'summary': summary_data.get('summary', ''),
+            'key_topics': summary_data.get('key_topics', []),
+            'sentiment': summary_data.get('sentiment', 'neutral'),
+            'sentiment_score': summary_data.get('sentiment_score', 0.0),
+            'covered_until_created_at': messages[-1]['created_at'],
+            'message_count': len(messages),
+            'updated_at': datetime.now(timezone.utc).isoformat(),
+        }
+        
+        # Upsert rollup
+        await run_supabase_async(
+            lambda: supabase.table('conversation_rollups')
+                .upsert(rollup_data, on_conflict='user_id,session_id')
+                .execute()
+        )
+        
+        logger.info(f"Background summarization completed for session {session_id}")
+        
+    except Exception as e:
+        logger.error(f"Background summarization failed: {e}")
 
 
 # Reaper Mode Endpoint

@@ -41,7 +41,8 @@ const [transcript, setTranscript] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const workletReadyRef = useRef(false);
   const audioQueueRef = useRef<Uint8Array[]>([]);
   const isPlayingRef = useRef(false);
   const awaitingResponseRef = useRef(false);
@@ -72,6 +73,7 @@ const [transcript, setTranscript] = useState('');
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new AudioContext({ sampleRate: 24000 });
+        workletReadyRef.current = false;
       }
 
       // Convert PCM to WAV
@@ -174,19 +176,47 @@ const [transcript, setTranscript] = useState('');
       
       if (!audioContextRef.current) {
         audioContextRef.current = new AudioContext({ sampleRate: 24000 });
+        workletReadyRef.current = false;
       }
       if (audioContextRef.current.state === 'suspended') {
         await audioContextRef.current.resume();
       }
 
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
-      
-      processor.onaudioprocess = (e) => {
+      const audioContext = audioContextRef.current;
+      const source = audioContext.createMediaStreamSource(stream);
+
+      if (!audioContext.audioWorklet) {
+        throw new Error('AudioWorklet is not supported in this browser.');
+      }
+
+      if (!workletReadyRef.current) {
+        const workletUrl = new URL('../../worklets/audio-processor.worklet.ts', import.meta.url);
+        await audioContext.audioWorklet.addModule(workletUrl);
+        workletReadyRef.current = true;
+      }
+
+      if (workletNodeRef.current) {
+        workletNodeRef.current.disconnect();
+        workletNodeRef.current = null;
+      }
+
+      const workletNode = new AudioWorkletNode(audioContext, 'audio-processor', {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        channelCount: 1,
+        outputChannelCount: [1],
+        processorOptions: {
+          bufferSize: 4096,
+        },
+      });
+
+      workletNode.port.onmessage = (event) => {
         if (wsRef.current?.readyState === WebSocket.OPEN && !isMutedRef.current) {
-          const inputData = e.inputBuffer.getChannelData(0);
-          const encoded = encodeAudioForAPI(new Float32Array(inputData));
-          
+          const inputData = event.data instanceof Float32Array
+            ? event.data
+            : new Float32Array(event.data as ArrayBuffer);
+          const encoded = encodeAudioForAPI(inputData);
+
           wsRef.current.send(JSON.stringify({
             type: 'input_audio_buffer.append',
             audio: encoded,
@@ -194,9 +224,9 @@ const [transcript, setTranscript] = useState('');
         }
       };
 
-      source.connect(processor);
-      processor.connect(audioContextRef.current.destination);
-      processorRef.current = processor;
+      source.connect(workletNode);
+      workletNode.connect(audioContext.destination);
+      workletNodeRef.current = workletNode;
       
       setIsListening(true);
     } catch (error) {
@@ -210,9 +240,10 @@ const [transcript, setTranscript] = useState('');
   }, [encodeAudioForAPI, toast]);
 
   const stopMicrophone = useCallback(() => {
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
+    if (workletNodeRef.current) {
+      workletNodeRef.current.port.onmessage = null;
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current = null;
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
@@ -392,6 +423,7 @@ const [transcript, setTranscript] = useState('');
     if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
+      workletReadyRef.current = false;
     }
     audioQueueRef.current = [];
     isPlayingRef.current = false;

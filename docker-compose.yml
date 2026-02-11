@@ -15,7 +15,7 @@ services:
       - /app/node_modules
     environment:
       - NODE_ENV=development
-      - API_PROXY_TARGET=http://roboto-sai-backend:5000
+      - API_PROXY_TARGET=http://roboto-sai-backend:10000
     restart: unless-stopped
     depends_on:
       - roboto-sai-backend

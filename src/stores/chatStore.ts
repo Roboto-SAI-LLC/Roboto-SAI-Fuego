@@ -235,6 +235,17 @@ export const useChatStore = create<ChatState>()(
             conversations = [newConversation, ...conversations];
           }
 
+          if (!conversations.some((conv) => conv.id === conversationId)) {
+            const newConversation: Conversation = {
+              id: conversationId,
+              title: message.role === 'user' ? generateTitle(message.content) : 'New Chat',
+              messages: [],
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+            conversations = [newConversation, ...conversations];
+          }
+
           const newMessage: Message = {
             ...message,
             id: typeof message.id === 'string'

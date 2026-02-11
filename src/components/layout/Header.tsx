@@ -5,7 +5,7 @@
 
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Home, MessageSquare, Scroll } from 'lucide-react';
+import { Home, MessageSquare, Scroll, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useChatStore } from '@/stores/chatStore';
 import robotoLogo from '@/assets/roboto-logo.png';
@@ -18,6 +18,7 @@ export const Header = () => {
     { path: '/', icon: Home, label: 'Home' },
     { path: '/chat', icon: MessageSquare, label: 'Chat' },
     { path: '/legacy', icon: Scroll, label: 'Legacy' },
+    { path: '/settings', icon: Settings, label: 'Settings' },
   ];
 
   return (
