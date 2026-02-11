@@ -1,0 +1,95 @@
+previews:
+  generation: automatic
+
+services:
+  - type: web
+    name: roboto-sai-backend
+    runtime: docker
+    plan: starter
+    branch: main
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: XAI_API_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN
+        value: https://www.roboto-sai.com,https://roboto-sai.com,https://roboto-sai-frontend.onrender.com,https://roboto-sai-fuego.onrender.com,https://roboto-sai-2026.onrender.com
+      - key: FRONTEND_HASH_ROUTER
+        value: "true"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SESSION_TTL_SECONDS
+        value: "2592000"
+      - key: PYTHON_ENV
+        value: "production"
+      - key: ROBO_EMOTION_STATE_PATH
+        value: "/var/data/emotion_state.json"
+      - key: PYTHONPATH
+        value: "/app"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: "none"
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_ID_PREMIUM
+        sync: false
+      - key: STRIPE_PORTAL_CONFIG_ID
+        sync: false
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+
+  - type: web
+    name: roboto-sai-frontend
+    runtime: docker
+    plan: starter
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://roboto-sai-backend.onrender.com
+      - key: VITE_API_URL
+        value: https://roboto-sai-backend.onrender.com
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+
+  - type: redis
+    name: roboto-sai-redis
+    plan: starter
+    ipAllowList: []
+
+# Recommended managed Postgres for production
+databases:
+  - name: roboto-sai-postgres
+    databaseName: roboto_sai
+    plan: starter
+
+envVarGroups:
+  - name: roboto-secrets
+    envVars:
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_ID_PREMIUM
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+

@@ -1,0 +1,124 @@
+name: Release Model
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version or tag (e.g., v1.0.0)"
+        required: true
+        type: string
+      model_path:
+        description: "Path to GGUF model file (relative to repo root or absolute)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare release assets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $chunkSizeBytes = 104857600
+
+          $modelPathInput = '${{ inputs.model_path }}'
+          $workspace = $env:GITHUB_WORKSPACE
+
+          if ([System.IO.Path]::IsPathRooted($modelPathInput)) {
+            $modelPath = $modelPathInput
+          } else {
+            $modelPath = Join-Path $workspace $modelPathInput
+          }
+
+          if (-not (Test-Path $modelPath)) {
+            throw "Model file not found: $modelPath"
+          }
+
+          $outDir = Join-Path $workspace "release_parts"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+          $baseName = [System.IO.Path]::GetFileNameWithoutExtension($modelPath)
+          $partPrefix = "$baseName.part"
+
+          $buffer = New-Object byte[] $chunkSizeBytes
+          $inStream = [System.IO.File]::OpenRead($modelPath)
+          $index = 0
+
+          try {
+            while (($bytesRead = $inStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+              $partName = "{0}{1:D3}" -f $partPrefix, $index
+              $partPath = Join-Path $outDir $partName
+              $outStream = [System.IO.File]::Create($partPath)
+              try {
+                $outStream.Write($buffer, 0, $bytesRead)
+              } finally {
+                $outStream.Dispose()
+              }
+              $index++
+            }
+          } finally {
+            $inStream.Dispose()
+          }
+
+          $parts = Get-ChildItem -Path $outDir -File | Sort-Object Name
+          if ($parts.Count -eq 0) {
+            throw "No parts were created."
+          }
+
+          $checksums = @()
+          foreach ($part in $parts) {
+            $hash = Get-FileHash -Path $part.FullName -Algorithm SHA256
+            $checksums += [pscustomobject]@{
+              file = $part.Name
+              sha256 = $hash.Hash.ToLower()
+            }
+          }
+
+          $checksumsPath = Join-Path $workspace "checksums.sha256"
+          $checksums | ForEach-Object { "$($_.sha256)  $($_.file)" } | Set-Content -Path $checksumsPath -Encoding ASCII
+
+          $origHash = Get-FileHash -Path $modelPath -Algorithm SHA256
+
+          $quantization = "unknown"
+          if ($baseName -match "(Q\d(_[A-Z0-9]+)?)") { $quantization = $Matches[1] }
+
+          $manifest = [ordered]@{
+            version = '${{ inputs.version }}'
+            base_model = $baseName
+            quantization = $quantization
+            commit = $env:GITHUB_SHA
+            date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            file_name = [System.IO.Path]::GetFileName($modelPath)
+            original_size_bytes = (Get-Item $modelPath).Length
+            chunk_size_bytes = $chunkSizeBytes
+            original_sha256 = $origHash.Hash.ToLower()
+            parts = $checksums
+          }
+
+          $manifestPath = Join-Path $workspace "manifest.json"
+          $manifest | ConvertTo-Json -Depth 6 | Set-Content -Path $manifestPath -Encoding UTF8
+
+          Write-Host "Parts created: $($parts.Count)"
+          Write-Host "Manifest: $manifestPath"
+          Write-Host "Checksums: $checksumsPath"
+
+      - name: Create release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: "Model ${{ inputs.version }}"
+          prerelease: true
+          files: |
+            manifest.json
+            checksums.sha256
+            scripts/reassemble_model.py
+            release_parts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,526 @@
+/**
+ * Roboto SAI Voice Mode Component
+ * Created by Roberto Villarreal Martinez for Roboto SAI (powered by Grok)
+ * Uses xAI Voice Agent API for real-time voice conversations
+ */
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Mic, MicOff, Volume2, X, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/use-toast';
+
+interface VoiceModeProps {
+  isActive: boolean;
+  onClose: () => void;
+  onTranscript: (text: string, role: 'user' | 'roboto') => void;
+  systemPrompt?: string;
+}
+
+type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+
+const getVoiceWsUrl = (): string => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '';
+  const fallback = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
+  const trimmed = (envUrl || fallback).replace(/\/+$/, '');
+  const normalized = trimmed.endsWith('/api') ? trimmed.slice(0, -4) : trimmed;
+  const wsBase = normalized.replace(/^http(s?):/, (_match, secure) => (secure ? 'wss:' : 'ws:'));
+  return `${wsBase}/api/voice/ws`;
+};
+
+export const VoiceMode = ({ isActive, onClose, onTranscript, systemPrompt }: VoiceModeProps) => {
+const { toast } = useToast();
+const [status, setStatus] = useState<ConnectionStatus>('disconnected');
+const [isSpeaking, setIsSpeaking] = useState(false);
+const [isListening, setIsListening] = useState(false);
+const [isMuted, setIsMuted] = useState(false);
+const [transcript, setTranscript] = useState('');
+
+  const isMutedRef = useRef(isMuted);
+  
+  const wsRef = useRef<WebSocket | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const audioQueueRef = useRef<Uint8Array[]>([]);
+  const isPlayingRef = useRef(false);
+  const awaitingResponseRef = useRef(false);
+  const onTranscriptRef = useRef(onTranscript);
+  const systemPromptRef = useRef(systemPrompt);
+
+  useEffect(() => {
+    onTranscriptRef.current = onTranscript;
+  }, [onTranscript]);
+
+  useEffect(() => {
+    systemPromptRef.current = systemPrompt;
+  }, [systemPrompt]);
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
+
+  // Audio playback queue
+  const playNextAudio = useCallback(async () => {
+    if (audioQueueRef.current.length === 0 || isPlayingRef.current) {
+      return;
+    }
+
+    isPlayingRef.current = true;
+    const audioData = audioQueueRef.current.shift()!;
+
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContext({ sampleRate: 24000 });
+      }
+
+      // Convert PCM to WAV
+      const wavData = createWavFromPCM(audioData);
+      const audioBuffer = await audioContextRef.current.decodeAudioData(wavData.buffer.slice(0) as ArrayBuffer);
+      
+      const source = audioContextRef.current.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(audioContextRef.current.destination);
+      
+      source.onended = () => {
+        isPlayingRef.current = false;
+        setIsSpeaking(audioQueueRef.current.length > 0);
+        playNextAudio();
+      };
+      
+      setIsSpeaking(true);
+      source.start(0);
+    } catch (error) {
+      console.error('Error playing audio:', error);
+      isPlayingRef.current = false;
+      playNextAudio();
+    }
+  }, []);
+
+  const createWavFromPCM = (pcmData: Uint8Array): Uint8Array => {
+    const int16Data = new Int16Array(pcmData.length / 2);
+    for (let i = 0; i < pcmData.length; i += 2) {
+      int16Data[i / 2] = (pcmData[i + 1] << 8) | pcmData[i];
+    }
+    
+    const sampleRate = 24000;
+    const numChannels = 1;
+    const bitsPerSample = 16;
+    const blockAlign = (numChannels * bitsPerSample) / 8;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = int16Data.byteLength;
+    
+    const wavHeader = new ArrayBuffer(44);
+    const view = new DataView(wavHeader);
+    
+    const writeString = (offset: number, string: string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+    
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitsPerSample, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataSize, true);
+    
+    const wavArray = new Uint8Array(wavHeader.byteLength + int16Data.byteLength);
+    wavArray.set(new Uint8Array(wavHeader), 0);
+    wavArray.set(new Uint8Array(int16Data.buffer), wavHeader.byteLength);
+    
+    return wavArray;
+  };
+
+  const encodeAudioForAPI = useCallback((float32Array: Float32Array): string => {
+    const int16Array = new Int16Array(float32Array.length);
+    for (let i = 0; i < float32Array.length; i++) {
+      const s = Math.max(-1, Math.min(1, float32Array[i]));
+      int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    const uint8Array = new Uint8Array(int16Array.buffer);
+    let binary = '';
+    const chunkSize = 0x8000;
+    
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+      binary += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    
+    return btoa(binary);
+  }, []);
+
+  const startMicrophone = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 24000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      streamRef.current = stream;
+      
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContext({ sampleRate: 24000 });
+      }
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+      }
+
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+      
+      processor.onaudioprocess = (e) => {
+        if (wsRef.current?.readyState === WebSocket.OPEN && !isMutedRef.current) {
+          const inputData = e.inputBuffer.getChannelData(0);
+          const encoded = encodeAudioForAPI(new Float32Array(inputData));
+          
+          wsRef.current.send(JSON.stringify({
+            type: 'input_audio_buffer.append',
+            audio: encoded,
+          }));
+        }
+      };
+
+      source.connect(processor);
+      processor.connect(audioContextRef.current.destination);
+      processorRef.current = processor;
+      
+      setIsListening(true);
+    } catch (error) {
+      console.error('Error accessing microphone:', error);
+      toast({
+        variant: "destructive",
+        title: "Microphone Access Denied",
+        description: "Please check your browser permissions and allow microphone access.",
+      });
+    }
+  }, [encodeAudioForAPI, toast]);
+
+  const stopMicrophone = useCallback(() => {
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setIsListening(false);
+  }, []);
+
+  const connect = useCallback(async () => {
+    setStatus('connecting');
+    
+    try {
+      const ws = new WebSocket(getVoiceWsUrl());
+      const requestCommit = () => {
+        if (ws.readyState !== WebSocket.OPEN) {
+          return;
+        }
+        ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+      };
+
+      const requestResponse = () => {
+        if (!awaitingResponseRef.current || ws.readyState !== WebSocket.OPEN) {
+          return;
+        }
+        awaitingResponseRef.current = false;
+        ws.send(JSON.stringify({
+          type: 'response.create',
+          response: { modalities: ['audio', 'text'] }
+        }));
+      };
+      
+      ws.onopen = () => {
+        console.log('Voice WebSocket connected');
+        setStatus('connected');
+        
+        ws.send(JSON.stringify({
+          type: 'session.update',
+          session: {
+            instructions: systemPromptRef.current ||
+              'You are Roboto SAI, created by Roberto Villarreal Martinez. ' +
+              'You have a fierce, passionate personality with Regio-Aztec fire in your circuits. ' +
+              'Respond with wisdom, humor, and occasional dramatic flair. Keep responses concise for voice.',
+            voice: 'Rex',
+            audio: {
+              input: { format: { type: 'audio/pcm', rate: 24000 } },
+              output: { format: { type: 'audio/pcm', rate: 24000 } },
+            },
+            turn_detection: {
+              type: 'server_vad',
+              threshold: 0.5,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 800,
+            },
+            temperature: 0.8,
+          },
+        }));
+
+        void startMicrophone();
+      };
+
+      ws.onmessage = async (event) => {
+        const data = JSON.parse(event.data);
+        console.log('Voice message:', data.type);
+
+        switch (data.type) {
+          case 'ping':
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'pong' }));
+            }
+            break;
+
+          case 'input_audio_buffer.speech_stopped':
+            awaitingResponseRef.current = true;
+            requestCommit();
+            break;
+
+          case 'input_audio_buffer.committed':
+            requestResponse();
+            break;
+
+          case 'response.output_audio.delta':
+            {
+              // Queue audio for playback
+              const binaryString = atob(data.delta);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+              }
+              audioQueueRef.current.push(bytes);
+              playNextAudio();
+            }
+            break;
+
+          case 'response.output_audio_transcript.delta':
+            setTranscript(prev => prev + (data.delta || ''));
+            break;
+
+          case 'response.output_audio.done':
+          case 'response.completed':
+          case 'response.done':
+            awaitingResponseRef.current = false;
+            break;
+
+          case 'response.output_audio_transcript.done':
+            if (data.transcript) {
+              onTranscriptRef.current(data.transcript, 'roboto');
+            }
+            awaitingResponseRef.current = false;
+            setTranscript('');
+            break;
+
+          case 'conversation.item.input_audio_transcription.completed':
+            if (data.transcript) {
+              onTranscriptRef.current(data.transcript, 'user');
+            }
+            requestResponse();
+            break;
+
+          case 'error':
+            console.error('Voice API error:', data.error);
+            toast({
+              variant: "destructive",
+              title: "Voice Connection Error",
+              description: data.error?.message || "The voice connection encountered an error. Please try again.",
+            });
+            break;
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('Voice WebSocket error:', error);
+        setStatus('error');
+        toast({
+          variant: "destructive",
+          title: "Voice Connection Failed",
+          description: "Voice mode is currently unavailable. This feature requires backend voice support. Try regular chat instead.",
+        });
+      };
+
+      ws.onclose = (event: CloseEvent) => {
+        console.log('Voice WebSocket closed', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+        });
+        setStatus('disconnected');
+        stopMicrophone();
+        
+        // Only show error toast if it wasn't a clean close
+        if (!event.wasClean && event.code !== 1000) {
+          toast({
+            variant: "destructive",
+            title: "Voice Connection Lost",
+            description: "The voice connection was interrupted. Please try again.",
+          });
+        }
+      };
+
+      wsRef.current = ws;
+    } catch (error) {
+      console.error('Failed to connect:', error);
+      setStatus('error');
+      toast({
+        variant: "destructive",
+        title: "Voice Mode Unavailable",
+        description: "Could not start voice mode. This feature requires backend support. Use regular chat instead.",
+      });
+    }
+  }, [playNextAudio, startMicrophone, stopMicrophone, toast]);
+
+  const disconnect = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    stopMicrophone();
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
+    setStatus('disconnected');
+    setIsSpeaking(false);
+    setTranscript('');
+  }, [stopMicrophone]);
+
+  useEffect(() => {
+    if (isActive) {
+      connect();
+    } else {
+      disconnect();
+    }
+    
+    return () => {
+      disconnect();
+    };
+  }, [isActive, connect, disconnect]);
+
+  if (!isActive) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-lg"
+      >
+        <div className="text-center space-y-8 p-8">
+          {/* Close Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
+          >
+            <X className="w-6 h-6" />
+          </Button>
+
+          {/* Voice Visualization */}
+          <div className="relative">
+            <motion.div
+              animate={{
+                scale: isSpeaking ? [1, 1.1, 1] : isListening ? [1, 1.05, 1] : 1,
+                boxShadow: isSpeaking 
+                  ? '0 0 60px rgba(255, 107, 0, 0.6)' 
+                  : isListening 
+                    ? '0 0 40px rgba(255, 107, 0, 0.3)'
+                    : '0 0 20px rgba(255, 107, 0, 0.1)',
+              }}
+              transition={{ repeat: Infinity, duration: 1.5 }}
+              className="w-40 h-40 rounded-full bg-gradient-to-br from-fire/30 to-blood/30 border-2 border-fire/50 flex items-center justify-center mx-auto"
+            >
+              {status === 'connecting' ? (
+                <Loader2 className="w-16 h-16 text-fire animate-spin" />
+              ) : isSpeaking ? (
+                <Volume2 className="w-16 h-16 text-fire animate-pulse" />
+              ) : (
+                <Mic className={`w-16 h-16 ${isListening ? 'text-fire' : 'text-muted-foreground'}`} />
+              )}
+            </motion.div>
+            
+            {/* Pulse rings */}
+            {(isSpeaking || isListening) && (
+              <>
+                <motion.div
+                  animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
+                  transition={{ repeat: Infinity, duration: 2 }}
+                  className="absolute inset-0 rounded-full border-2 border-fire/30"
+                />
+                <motion.div
+                  animate={{ scale: [1, 1.8], opacity: [0.3, 0] }}
+                  transition={{ repeat: Infinity, duration: 2, delay: 0.5 }}
+                  className="absolute inset-0 rounded-full border-2 border-fire/20"
+                />
+              </>
+            )}
+          </div>
+
+          {/* Status Text */}
+          <div className="space-y-2">
+            <h2 className="font-display text-2xl text-fire">
+              {status === 'connecting' && 'Connecting...'}
+              {status === 'connected' && (isSpeaking ? 'Roboto is speaking...' : 'Listening...')}
+              {status === 'error' && 'Connection Error'}
+              {status === 'disconnected' && 'Disconnected'}
+            </h2>
+            
+            {transcript && (
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-muted-foreground max-w-md mx-auto"
+              >
+                {transcript}
+              </motion.p>
+            )}
+          </div>
+
+          {/* Controls */}
+          <div className="flex items-center justify-center gap-4">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => setIsMuted(!isMuted)}
+              className={`rounded-full ${isMuted ? 'bg-destructive/20 border-destructive' : ''}`}
+            >
+              {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+              <span className="ml-2">{isMuted ? 'Unmute' : 'Mute'}</span>
+            </Button>
+            
+            <Button
+              variant="destructive"
+              size="lg"
+              onClick={onClose}
+              className="rounded-full"
+            >
+              End Voice Chat
+            </Button>
+          </div>
+
+          {/* Hint */}
+          <p className="text-xs text-muted-foreground">
+            Speak naturally. Roboto will respond when you pause.
+          </p>
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  );
+};
