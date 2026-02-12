@@ -60,16 +60,21 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL:-https://roboto-sai-backend.onrender.c
 ENV VITE_API_URL=${VITE_API_URL:-https://roboto-sai-backend.onrender.com}
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
-ENV NODE_ENV=production
+ENV NODE_ENV=development
 
 # Copy application code
 COPY . .
 
 # Install full deps for build (vite dev deps required)
-RUN npm ci --legacy-peer-deps && npm cache clean --force
+RUN npm ci --legacy-peer-deps --include=dev && npm cache clean --force
 
 # Build the application
-RUN npm run build && npm prune --production
+RUN npm run build
+
+# Remove devDependencies for the production image copy
+RUN npm prune --production
+
+ENV NODE_ENV=production
 
 # Stage 3: Production (optimized for Render)
 FROM nginx:alpine AS production
@@ -163,16 +168,31 @@ http { \
     tcp_nodelay on; \
     keepalive_timeout 65; \
     types_hash_max_size 2048; \
+    include /etc/nginx/conf.d/*.conf; \
     client_max_body_size 16M; \
     server_tokens off; \
 }' > /etc/nginx/nginx.conf
 
 # Health check for Render
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD /bin/sh -c 'curl -f http://localhost:${PORT:-10000}/health || exit 1' 
+    CMD /bin/sh -c 'curl -f http://localhost:${PORT:-10000}/health || exit 1'
 
-# Create entrypoint script to substitute PORT and start nginx (root-owned; will set default PORT and write config)
-RUN cat > /entrypoint.sh <<'EOF'\n#!/bin/sh\nset -e\n\n# Ensure PORT has a sensible default at runtime\nPORT=${PORT:-10000}\nexport PORT\n\n# Substitute PORT in nginx config (only PORT will be substituted)\nenvsubst '\$PORT' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf\n\n# Start nginx (master runs as root and workers run as nginx user via config)\nexec nginx -g "daemon off;"\nEOF\nRUN chmod 755 /entrypoint.sh && chown root:root /entrypoint.sh
+# Create entrypoint script to substitute PORT and start nginx
+COPY <<'EOF' /entrypoint.sh
+#!/bin/sh
+set -e
+
+# Ensure PORT has a sensible default at runtime
+PORT="${PORT:-10000}"
+export PORT
+
+# Substitute PORT in nginx config
+envsubst '$PORT' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf
+
+exec "$@"
+EOF
+
+RUN chmod 755 /entrypoint.sh && chown root:root /entrypoint.sh
 
 # Ensure entrypoint will run when the container starts
 ENTRYPOINT ["/entrypoint.sh"]
