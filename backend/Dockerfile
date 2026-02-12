@@ -1,4 +1,4 @@
-FROM python:3.11-alpine
+FROM python:3.11-slim
 
 # Set environment variables for optimization
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -6,16 +6,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app \
     PORT=10000
 
-# Install system dependencies (Alpine optimized)
-RUN apk add --no-cache \
-    build-base \
+# Install system dependencies (Debian slim)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     git \
     curl \
-    && rm -rf /var/cache/apk/*
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security (skip if already exists)
-RUN addgroup -g 1000 -S roboto 2>/dev/null || true && \
-    adduser -S -D -H -u 1000 -h /app -s /sbin/nologin -G roboto -g roboto roboto 2>/dev/null || true
+RUN groupadd -g 1000 -r roboto 2>/dev/null || true && \
+    useradd -r -u 1000 -g roboto -d /app -s /usr/sbin/nologin -c "roboto user" roboto 2>/dev/null || true
 
 WORKDIR /app
 
