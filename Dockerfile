@@ -3,7 +3,7 @@
 # Created for development flexibility and production optimization
 
 # Stage 1: Base with Python support (for any Node.js Python dependencies)
-FROM node:18-alpine AS base
+FROM node:20-alpine AS base
 
 # Install Python and essential build tools for Alpine
 RUN apk add --no-cache \
