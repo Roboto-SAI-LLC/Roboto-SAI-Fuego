@@ -6,7 +6,20 @@ This file can be modified by Roboto SAI to add new capabilities and improvements
 """
 
 from datetime import datetime
-from roboto_sai_sdk.personality.roboto_ai4 import Roberto
+
+# Roboto SAI SDK is optional in production builds
+try:
+    from roboto_sai_sdk.personality.roboto_ai4 import Roberto
+    SDK_PERSONALITY_AVAILABLE = True
+except ImportError:
+    SDK_PERSONALITY_AVAILABLE = False
+
+    class Roberto:
+        """Fallback personality stub when roboto_sai_sdk is unavailable."""
+
+        pass
+
+    print("⚠️ roboto_sai_sdk not available; using stub Roberto personality")
 import json
 import os
 import asyncio
