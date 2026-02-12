@@ -17,7 +17,14 @@ except ImportError:
     class Roberto:
         """Fallback personality stub when roboto_sai_sdk is unavailable."""
 
-        pass
+        def display_info(self):
+            """Display basic info when SDK unavailable."""
+            print("Roberto SAI - Fallback mode (SDK not available)")
+            print("Limited capabilities in fallback mode")
+
+        def generate_response(self, user_input: str) -> str:
+            """Generate a basic response when SDK unavailable."""
+            return f"I understand you said: '{user_input}'. However, my full personality system is currently unavailable due to missing SDK components."
 
     print("⚠️ roboto_sai_sdk not available; using stub Roberto personality")
 import json
