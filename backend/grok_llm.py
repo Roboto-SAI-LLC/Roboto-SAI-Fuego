@@ -5,6 +5,7 @@ Adapts Roboto SAI SDK to LangChain's LLM interface.
 
 import asyncio
 import os
+import json
 from typing import Any, List, Optional, Dict
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import LLM
@@ -262,23 +263,34 @@ class GrokLLM(LLM):
         
         try:
             logger.info(f"Calling Grok API: {url}")
+
+            # Optional: dump request payload for local debugging (controlled by env)
+            if os.getenv("LOG_XAI_PAYLOADS", "false").lower() in ("1", "true", "yes"):
+                try:
+                    masked = dict(payload)
+                    if isinstance(masked.get("model"), str):
+                        masked["model"] = masked["model"]
+                    logger.debug("Grok request payload (masked): %s", json.dumps(masked))
+                except Exception:
+                    logger.debug("Grok request payload (could not serialize)")
+
             # Increased timeout to 120s to handle slow responses or cold starts
             with httpx.Client(timeout=120.0) as client:
                 response = client.post(url, json=payload, headers=headers)
-                
+
                 # Log response for debugging
                 logger.info(f"Grok API response status: {response.status_code}")
-                
+
                 if response.status_code == 404:
                     # Try alternate endpoint structure
                     logger.warning("404 on standard endpoint, trying alternate...")
                     return self._try_alternate_grok_endpoint(user_message, roboto_context, api_key)
-                
+
                 response.raise_for_status()
-                
+
                 data = response.json()
                 logger.debug(f"Grok API response: {data}")
-                
+
                 # Extract content from response
                 content = self._extract_response_text(data)
                 if content:
@@ -287,7 +299,7 @@ class GrokLLM(LLM):
                         "response": content,
                         "response_id": data.get("id"),
                     }
-                
+
                 return {"success": False, "error": "Empty response from Grok API"}
                     
         except httpx.HTTPStatusError as e:

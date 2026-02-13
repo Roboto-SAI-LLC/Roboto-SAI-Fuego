@@ -65,10 +65,15 @@ services:
       - PYTHON_ENV=development
       - ROBO_EMOTION_STATE_PATH=/app/data/emotion_state.json
       - PORT=10000
+      # Dev helpers — enable to reproduce Grok errors locally
+      - DEV_VERIFY_GROK=true
+      - XAI_VERIFY_FAIL_ON_ERROR=true
+      - LOG_XAI_PAYLOADS=true
     env_file:
       - .env
     volumes:
-      # Mount data directory for persistent storage in development
+      # Mount backend source for local iteration + mount data directory for persistence
+      - ./backend:/app:cached
       - ./backend/data:/app/data
     restart: unless-stopped
     networks:
