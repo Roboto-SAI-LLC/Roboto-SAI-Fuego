@@ -199,6 +199,18 @@ async def submit_feedback(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid message_id format")
 
+    # Verify the referenced message exists to avoid DB foreign-key failures
+    try:
+        msg_check = await supabase.table("messages").select("id").eq("id", feedback.message_id).maybe_single().execute()
+        if not msg_check or not msg_check.data:
+            logger.warning(f"Feedback submitted for missing message_id={feedback.message_id} by user={user['id']}")
+            raise HTTPException(status_code=404, detail="Message not found")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Failed to validate message existence for {feedback.message_id}: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to validate message_id")
+
     data = {
         "message_id": feedback.message_id,
         "user_id": user["id"],
@@ -207,6 +219,11 @@ async def submit_feedback(
     try:
         await supabase.table("message_feedback").insert(data).execute()
     except Exception as exc:
+        # Detect common foreign-key / conflict scenarios and return a clear error
+        err_text = str(exc).lower()
+        if "foreign key" in err_text or "23503" in err_text or "message_id" in err_text:
+            logger.warning(f"Feedback insert FK violation for message_id={feedback.message_id}: {exc}")
+            raise HTTPException(status_code=400, detail="message_id does not exist")
         logger.error(f"Feedback insert error: {exc}")
         raise HTTPException(status_code=500, detail="Failed to record feedback")
 
