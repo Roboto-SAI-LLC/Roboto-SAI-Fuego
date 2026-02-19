@@ -1,0 +1,17 @@
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+[user]
+	name = Roboto SAI
+	email = ytkrobthugod@gmail.com
+[http]
+	sslVerify = false
+	postBuffer = 524288000
+[pull]
+	rebase = false
+[credential "https://huggingface.co"]
+	provider = generic
+[credential]
+	helper = "!f() { /app/.vscode-server-insiders/bin/0366405821955682155a4507a122611c742df3fa-insider/node /tmp/vscode-remote-containers-7a5ef6bb-8305-4aa5-9f5e-aa56b6a9718f.js git-credential-helper $*; }; f"

@@ -5,62 +5,84 @@
  * Connected to FastAPI backend with xAI Grok integration
  */
 
-import { useRef, useEffect, useMemo, useState } from 'react';
+import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useChatStore, FileAttachment } from '@/stores/chatStore';
+import { useChatStore, FileAttachment, Message } from '@/stores/chatStore';
 import { useMemoryStore } from '@/stores/memoryStore';
 import { ChatMessage } from '@/components/chat/ChatMessage';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
 import { EmberParticles } from '@/components/effects/EmberParticles';
 import { Header } from '@/components/layout/Header';
-import { ChatSidebar } from '@/components/chat/ChatSidebar';
+import { ChatSidebar, ChatSidebarSessionItem } from '@/components/chat/ChatSidebar';
 import { VoiceMode } from '@/components/chat/VoiceMode';
-import { Flame, Skull, MessageSquare } from 'lucide-react';
+import { Flame, Loader2, RefreshCw, Skull, Sparkles, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from '@/components/ui/use-toast';
 import { useRobotoClient } from '@/hooks/useRobotoClient';
+import {
+  ChatHistoryPage,
+  ChatRollupSummary,
+  normalizeHistoryResponse,
+  normalizeRollupResponse,
+  normalizeSessionsResponse,
+  parseTimestamp,
+} from '@/lib/chatApi';
 
-type ChatApiResponse = {
-  reply?: string;
-  response?: string;
-  content?: string;
-  error?: string;
-  detail?: string;
-  roboto_message_id?: string;
-  user_message_id?: string;
+type ApiError = Error & { status?: number };
+type SidebarSession = ChatSidebarSessionItem & { last_message_at?: string | number };
+
+const HISTORY_PAGE_SIZE = 40;
+
+const buildTitle = (content: string): string => {
+  const cleaned = content.replace(/[^\w\s]/g, '').trim();
+  const words = cleaned.split(/\s+/).slice(0, 5);
+  return words.join(' ') || 'New Chat';
+};
+
+const formatSessionTime = (value?: string | number): string => {
+  if (!value) return 'New';
+  const parsed = parseTimestamp(value);
+  if (Number.isNaN(parsed.getTime())) return 'Unknown';
+  return formatDistanceToNow(parsed, { addSuffix: true });
 };
 
 const Chat = () => {
-const navigate = useNavigate();
-const { toast } = useToast();
-const { userId, isLoggedIn, username, email } = useAuthStore();
-const {
-  getMessages,
-  isLoading,
-  ventMode,
-  voiceMode,
-  currentTheme,
-  addMessage,
-  setLoading,
-  toggleVentMode,
-  toggleVoiceMode,
-  getAllConversationsContext,
-  loadUserHistory,
-  userId: storeUserId
-} = useChatStore();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { userId, isLoggedIn, username, email } = useAuthStore();
+  const {
+    getMessages,
+    isLoading,
+    ventMode,
+    voiceMode,
+    currentTheme,
+    addMessage,
+    setLoading,
+    toggleVentMode,
+    toggleVoiceMode,
+    getAllConversationsContext,
+    createNewConversation,
+    selectConversation,
+    currentConversationId,
+  } = useChatStore();
 
-const { buildContextForAI, addMemory, addConversationSummary, trackEntity, isReady: memoryReady } = useMemoryStore();
+  const { buildContextForAI, addMemory, trackEntity, isReady: memoryReady } = useMemoryStore();
+  const {
+    sendMessage: streamMessage,
+  } = useRobotoClient();
 
-const {
-  sendMessage: streamMessage,
-} = useRobotoClient();
-
-  const messages = getMessages();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [localSessions, setLocalSessions] = useState<SidebarSession[]>([]);
 
   const rainDrops = useMemo(
     () =>
@@ -77,22 +99,236 @@ const {
     []
   );
 
-  const scrollToBottom = () => {
+  const apiBaseUrl = useMemo(() => {
+    const envUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '';
+    const fallbackBase = globalThis.window?.location.origin ?? '';
+    return (envUrl || fallbackBase).replace(/\/+$/, '').replace(/\/api$/, '');
+  }, []);
+
+  const apiFetch = useCallback(async <T,>(path: string, init?: RequestInit): Promise<T> => {
+    const response = await fetch(`${apiBaseUrl}${path}`, {
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers || {}),
+      },
+      ...init,
+    });
+
+    if (response.status === 401) {
+      navigate('/login');
+      const unauthorizedError = new Error('Unauthorized') as ApiError;
+      unauthorizedError.status = 401;
+      throw unauthorizedError;
+    }
+
+    if (!response.ok) {
+      let message = `Request failed (${response.status})`;
+      try {
+        const data = await response.json() as Record<string, unknown>;
+        message = (typeof data.detail === 'string' && data.detail)
+          || (typeof data.error === 'string' && data.error)
+          || message;
+      } catch {
+        // ignore JSON parsing errors
+      }
+      const error = new Error(message) as ApiError;
+      error.status = response.status;
+      throw error;
+    }
+
+    return response.json() as Promise<T>;
+  }, [apiBaseUrl, navigate]);
+
+  const sessionsQuery = useQuery({
+    queryKey: ['chat-sessions'],
+    queryFn: async () => {
+      const data = await apiFetch<unknown>('/api/sessions');
+      return normalizeSessionsResponse(data).map((session) => ({
+        id: session.id,
+        title: session.title,
+        messageCount: session.message_count,
+        preview: session.summary_preview || session.preview,
+        last_message_at: session.last_message_at,
+      }));
+    },
+    staleTime: 10000,
+    retry: 1,
+  });
+
+  const mergedSessions = useMemo(() => {
+    const sessionMap = new Map<string, SidebarSession>();
+    (sessionsQuery.data ?? []).forEach((session) => {
+      sessionMap.set(session.id, session);
+    });
+
+    localSessions.forEach((session) => {
+      if (!sessionMap.has(session.id)) {
+        sessionMap.set(session.id, session);
+      } else {
+        const existing = sessionMap.get(session.id);
+        sessionMap.set(session.id, {
+          ...(existing || session),
+          ...session,
+        });
+      }
+    });
+
+    return Array.from(sessionMap.values()).sort((a, b) => {
+      const timeA = a.last_message_at ? parseTimestamp(a.last_message_at).getTime() : 0;
+      const timeB = b.last_message_at ? parseTimestamp(b.last_message_at).getTime() : 0;
+      return timeB - timeA;
+    });
+  }, [localSessions, sessionsQuery.data]);
+
+  useEffect(() => {
+    if (!activeSessionId && mergedSessions[0]?.id) {
+      setActiveSessionId(mergedSessions[0].id);
+      selectConversation(mergedSessions[0].id);
+    }
+  }, [activeSessionId, mergedSessions, selectConversation]);
+
+  useEffect(() => {
+    if (activeSessionId && activeSessionId !== currentConversationId) {
+      selectConversation(activeSessionId);
+    }
+  }, [activeSessionId, currentConversationId, selectConversation]);
+
+  const historyQuery = useInfiniteQuery<
+    ChatHistoryPage,
+    ApiError,
+    ChatHistoryPage,
+    [string, string | null],
+    string | undefined
+  >({
+    queryKey: ['chat-history', activeSessionId],
+    enabled: Boolean(activeSessionId),
+    initialPageParam: undefined,
+    queryFn: async ({ pageParam }) => {
+      if (!activeSessionId) {
+        return { messages: [], hasMore: false, nextCursor: null };
+      }
+
+      const params = new URLSearchParams();
+      params.set('limit', String(HISTORY_PAGE_SIZE));
+      params.set('session_id', activeSessionId);
+      if (pageParam) params.set('cursor', pageParam);
+
+      try {
+        const primaryData = await apiFetch<unknown>(`/api/chat/history?${params.toString()}`);
+        return normalizeHistoryResponse(primaryData);
+      } catch (error) {
+        const typedError = error as ApiError;
+        if (typedError.status === 404) {
+          const fallbackData = await apiFetch<unknown>(`/api/chat/history/paginated?${params.toString()}`);
+          return normalizeHistoryResponse(fallbackData);
+        }
+        throw typedError;
+      }
+    },
+    getNextPageParam: (lastPage) => {
+      if (!lastPage.hasMore) return undefined;
+      return lastPage.nextCursor || undefined;
+    },
+    retry: 1,
+  });
+
+  const historyMessages = useMemo(() => {
+    const pages = historyQuery.data?.pages ?? [];
+    const combined = pages.flatMap((page) => page.messages || []);
+    return combined.sort((a, b) => parseTimestamp(a.timestamp).getTime() - parseTimestamp(b.timestamp).getTime());
+  }, [historyQuery.data]);
+
+  const liveMessages = getMessages();
+
+  const mergedMessages = useMemo(() => {
+    const messageMap = new Map<string, Message>();
+    [...historyMessages, ...liveMessages].forEach((message) => {
+      messageMap.set(message.id, {
+        ...message,
+        timestamp: parseTimestamp(message.timestamp),
+      });
+    });
+
+    return Array.from(messageMap.values()).sort(
+      (a, b) => parseTimestamp(a.timestamp).getTime() - parseTimestamp(b.timestamp).getTime()
+    );
+  }, [historyMessages, liveMessages]);
+
+  const summaryQuery = useQuery<ChatRollupSummary, ApiError>({
+    queryKey: ['chat-rollup', activeSessionId],
+    enabled: Boolean(activeSessionId),
+    queryFn: async () => {
+      if (!activeSessionId) {
+        return { summary: '', topics: [], sentiment: 'neutral', message_count: 0 };
+      }
+      const data = await apiFetch<unknown>(`/api/conversations/rollup?session_id=${encodeURIComponent(activeSessionId)}`);
+      return normalizeRollupResponse(data);
+    },
+    retry: 1,
+  });
+
+  const summaryMutation = useMutation<unknown, ApiError>({
+    mutationFn: async () => {
+      if (!activeSessionId) return null;
+      return apiFetch<unknown>(`/api/conversations/summarize?session_id=${encodeURIComponent(activeSessionId)}`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['chat-rollup', activeSessionId] });
+      await queryClient.invalidateQueries({ queryKey: ['chat-sessions'] });
+      toast({
+        title: 'Summary refreshed',
+        description: 'Conversation rollup updated.',
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: 'destructive',
+        title: 'Summary failed',
+        description: error.message || 'Unable to regenerate summary.',
+      });
+    },
+  });
+
+  const upsertLocalSession = useCallback((sessionId: string, patch: Partial<SidebarSession>) => {
+    setLocalSessions((previous) => {
+      const existing = previous.find((session) => session.id === sessionId);
+      if (!existing) {
+        return [{ id: sessionId, title: 'New Chat', ...patch }, ...previous];
+      }
+      return previous.map((session) => (
+        session.id === sessionId
+          ? { ...session, ...patch }
+          : session
+      ));
+    });
+  }, []);
+
+  const handleSelectSession = useCallback((sessionId: string) => {
+    setActiveSessionId(sessionId);
+    selectConversation(sessionId);
+  }, [selectConversation]);
+
+  const handleNewSession = useCallback(() => {
+    const newSessionId = createNewConversation();
+    setActiveSessionId(newSessionId);
+    upsertLocalSession(newSessionId, {
+      title: 'New Chat',
+      preview: 'No messages yet',
+      messageCount: 0,
+      last_message_at: new Date().toISOString(),
+    });
+  }, [createNewConversation, upsertLocalSession]);
+
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isLoading]);
-
-  // refreshSession handled by RequireAuth
-
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    if (userId && userId !== storeUserId) {
-      loadUserHistory(userId);
-    }
-  }, [isLoggedIn, userId, storeUserId, loadUserHistory]);
+  }, [mergedMessages, isLoading, scrollToBottom]);
 
   // Extract and store important information from conversations
   const extractMemories = async (userMessage: string, robotoResponse: string, sessionId: string) => {
@@ -123,6 +359,8 @@ const {
         );
       }
     }
+
+    void robotoResponse;
   };
 
   const displayChatError = (errorMessage: string) => {
@@ -168,10 +406,29 @@ const {
       return;
     }
 
+    let sessionId = activeSessionId || currentConversationId;
+    if (!sessionId) {
+      sessionId = createNewConversation();
+    }
+
+    if (sessionId !== currentConversationId) {
+      selectConversation(sessionId);
+    }
+    if (sessionId !== activeSessionId) {
+      setActiveSessionId(sessionId);
+    }
+
+    const existingSession = mergedSessions.find((session) => session.id === sessionId);
+
     setLoading(true);
 
-    const conversationId = addMessage({ role: 'user', content, attachments });
-    const sessionId = conversationId;
+    addMessage({ role: 'user', content, attachments });
+    upsertLocalSession(sessionId, {
+      title: existingSession?.title || buildTitle(content),
+      preview: content,
+      messageCount: (existingSession?.messageCount || 0) + 1,
+      last_message_at: new Date().toISOString(),
+    });
 
     const conversationContext = getAllConversationsContext();
     const memoryContext = memoryReady ? buildContextForAI(content) : '';
@@ -201,6 +458,10 @@ const {
               content: robotoContent,
               id: event.id
             });
+            upsertLocalSession(sessionId, {
+              preview: robotoContent,
+              last_message_at: new Date().toISOString(),
+            });
             if (memoryReady) {
               void extractMemories(content, robotoContent, sessionId);
             }
@@ -212,6 +473,9 @@ const {
           }
         }
       );
+      await queryClient.invalidateQueries({ queryKey: ['chat-sessions'] });
+      await queryClient.invalidateQueries({ queryKey: ['chat-history', sessionId] });
+      await queryClient.invalidateQueries({ queryKey: ['chat-rollup', sessionId] });
     } catch (error) {
       console.error('[Chat] handleSend error', error);
       const errorMessage = error instanceof Error ? error.message : 'Connection error';
@@ -228,7 +492,15 @@ const {
   return (
     <div className={`min-h-screen flex flex-col ${ventMode ? 'vent-mode shake' : ''}`}>
       {/* Chat Sidebar */}
-      <ChatSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <ChatSidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        sessions={mergedSessions}
+        activeSessionId={activeSessionId}
+        isLoadingSessions={sessionsQuery.isLoading}
+        onSelectSession={handleSelectSession}
+        onNewSession={handleNewSession}
+      />
 
       {/* Header */}
       <Header />
@@ -259,8 +531,62 @@ const {
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto">
           <div className="container mx-auto max-w-4xl px-4 py-6 pl-16">
+            {activeSessionId && (
+              <Card className="mb-6 border-border/50 bg-card/40">
+                <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+                  <CardTitle className="text-base">Session rollup</CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => summaryMutation.mutate()}
+                    disabled={summaryMutation.isPending || !activeSessionId}
+                  >
+                    {summaryMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {summaryQuery.isLoading && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading session summary...
+                    </div>
+                  )}
+
+                  {!summaryQuery.isLoading && summaryQuery.data?.summary && (
+                    <>
+                      <p className="text-sm text-foreground/90 leading-relaxed">{summaryQuery.data.summary}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="text-xs capitalize">
+                          {summaryQuery.data.sentiment || 'neutral'}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs gap-1">
+                          <Sparkles className="h-3.5 w-3.5" />
+                          {summaryQuery.data.message_count || mergedMessages.length} messages
+                        </Badge>
+                        {summaryQuery.data.updated_at && (
+                          <Badge variant="outline" className="text-xs">
+                            Updated {formatSessionTime(summaryQuery.data.updated_at)}
+                          </Badge>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {!summaryQuery.isLoading && !summaryQuery.data?.summary && (
+                    <p className="text-sm text-muted-foreground">
+                      No rollup yet. Generate a summary for this session.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Welcome Message if empty */}
-            {messages.length === 0 && (
+            {mergedMessages.length === 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -293,8 +619,28 @@ const {
 
             {/* Messages */}
             <div className="space-y-6">
+              {historyQuery.hasNextPage && (
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => historyQuery.fetchNextPage()}
+                    disabled={historyQuery.isFetchingNextPage}
+                  >
+                    {historyQuery.isFetchingNextPage && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Load older messages
+                  </Button>
+                </div>
+              )}
+
+              {historyQuery.isError && mergedMessages.length === 0 && (
+                <div className="text-sm text-destructive text-center">
+                  Unable to load message history for this session.
+                </div>
+              )}
+
               <AnimatePresence mode="popLayout">
-                {messages.map((message) => (
+                {mergedMessages.map((message) => (
                   <ChatMessage key={message.id} message={message} />
                 ))}
               </AnimatePresence>

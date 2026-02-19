@@ -45,6 +45,7 @@ class AuthResponse(BaseModel):
     success: bool
     user: Optional[UserResponse] = None
     message: Optional[str] = None
+    pending_verification: Optional[bool] = None
 
 # Dependency to get Supabase client
 async def get_supabase_client() -> AsyncClient:
@@ -107,6 +108,14 @@ async def login(
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         user = auth_response.user
+
+        # Enforce email verification before granting access
+        if not user.email_confirmed_at:
+            raise HTTPException(
+                status_code=403,
+                detail="Email not verified. Please check your inbox and verify your email before logging in."
+            )
+
         user_data = UserResponse(
             id=user.id,
             email=user.email,
@@ -134,11 +143,15 @@ async def login(
 
         return AuthResponse(success=True, user=user_data)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Login failed: {e}")
         # Check for specific Supabase error messages
         error_str = str(e).lower()
-        if "invalid login credentials" in error_str or "email not confirmed" in error_str:
+        if "email not confirmed" in error_str or "email not verified" in error_str:
+            raise HTTPException(status_code=403, detail="Email not verified. Please check your inbox and verify your email before logging in.")
+        elif "invalid login credentials" in error_str:
             raise HTTPException(status_code=401, detail="Invalid email or password")
         elif "account not found" in error_str or "user not found" in error_str:
             raise HTTPException(status_code=401, detail="Account not found")
@@ -160,12 +173,22 @@ async def register(
         if not auth_response.user:
             raise HTTPException(status_code=400, detail="Registration failed")
 
-        # Note: Supabase may require email confirmation
-        return AuthResponse(
-            success=True,
-            message="Registration successful. Please check your email for confirmation." if not auth_response.session else "Registration successful"
-        )
+        # If email confirmation is required, session will be None
+        if not auth_response.session or not auth_response.user.email_confirmed_at:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                content={
+                    "success": True,
+                    "pending_verification": True,
+                    "message": "Registration successful. Please check your email to verify your account before logging in."
+                },
+                status_code=202
+            )
 
+        return AuthResponse(success=True, message="Registration successful")
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Registration failed: {e}")
         raise HTTPException(status_code=400, detail="Registration failed")

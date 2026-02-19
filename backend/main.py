@@ -428,9 +428,29 @@ async def auth_register(req: RegisterRequest, request: Request) -> JSONResponse:
         result = await run_supabase_async(lambda: supabase.auth.sign_up({"email": req.email, "password": req.password}))
         if not result.user:
             raise HTTPException(status_code=400, detail=result.error.message if result.error else "Registration failed")
-        
+
         user_id = result.user.id
-        # Local user
+
+        # If email is not yet confirmed, do NOT create a session — just tell the user to verify.
+        if not result.user.email_confirmed_at:
+            # Still upsert the user record so it exists when they confirm.
+            user_data = {
+                "id": user_id,
+                "email": req.email,
+                "display_name": req.email.split("@")[0],
+                "provider": "supabase"
+            }
+            await run_supabase_async(lambda: supabase.table("users").upsert(user_data).execute())
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "success": True,
+                    "email_verification_required": True,
+                    "message": "Account created. Please check your email and click the confirmation link before logging in."
+                }
+            )
+
+        # Email already confirmed (e.g. auto-confirm enabled in dev) — create session immediately.
         user_data = {
             "id": user_id,
             "email": req.email,
@@ -438,12 +458,11 @@ async def auth_register(req: RegisterRequest, request: Request) -> JSONResponse:
             "provider": "supabase"
         }
         await run_supabase_async(lambda: supabase.table("users").upsert(user_data).execute())
-        
-        # Local session cookie
+
         sess_id = secrets.token_urlsafe(32)
         expires = (_utcnow() + _session_ttl()).isoformat()
         await run_supabase_async(lambda: supabase.table("auth_sessions").insert({"id": sess_id, "user_id": user_id, "expires_at": expires}).execute())
-        
+
         resp = JSONResponse({"success": True, "user": user_data})
         resp.set_cookie(
             key=SESSION_COOKIE_NAME,
@@ -474,7 +493,14 @@ async def auth_login(req: LoginRequest, request: Request) -> JSONResponse:
         result = await run_supabase_async(lambda: supabase.auth.sign_in_with_password({"email": req.email, "password": req.password}))
         if not result.user:
             raise HTTPException(status_code=401, detail=result.error.message if result.error else "Login failed")
-        
+
+        # Reject unverified email addresses
+        if not result.user.email_confirmed_at:
+            raise HTTPException(
+                status_code=403,
+                detail="Email address not verified. Please check your inbox and confirm your email before logging in."
+            )
+
         user_id = result.user.id
         # Local user
         user_data = {

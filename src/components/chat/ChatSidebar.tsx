@@ -4,19 +4,39 @@
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, MessageSquare, Trash2, X, ChevronLeft } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChatStore } from '@/stores/chatStore';
 import { useAuthStore } from '@/stores/authStore';
 import { UpgradeButton } from '@/components/UpgradeButton';
 
+export interface ChatSidebarSessionItem {
+  id: string;
+  title: string;
+  messageCount?: number;
+  preview?: string;
+}
+
 interface ChatSidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  sessions?: ChatSidebarSessionItem[];
+  activeSessionId?: string | null;
+  isLoadingSessions?: boolean;
+  onSelectSession?: (id: string) => void;
+  onNewSession?: () => void;
 }
 
-export const ChatSidebar = ({ isOpen, onClose }: ChatSidebarProps) => {
+export const ChatSidebar = ({
+  isOpen,
+  onClose,
+  sessions,
+  activeSessionId,
+  isLoadingSessions,
+  onSelectSession,
+  onNewSession,
+}: ChatSidebarProps) => {
   const {
     conversations,
     currentConversationId,
@@ -27,12 +47,30 @@ export const ChatSidebar = ({ isOpen, onClose }: ChatSidebarProps) => {
   } = useChatStore();
   const { username, logout } = useAuthStore();
 
+  const localSessions: ChatSidebarSessionItem[] = conversations.map((conversation) => ({
+    id: conversation.id,
+    title: conversation.title,
+    messageCount: conversation.messages.length,
+    preview: conversation.messages[conversation.messages.length - 1]?.content,
+  }));
+
+  const displayedSessions = sessions ?? localSessions;
+  const selectedSessionId = activeSessionId ?? currentConversationId;
+
   const handleNewChat = () => {
+    if (onNewSession) {
+      onNewSession();
+      return;
+    }
     createNewConversation();
   };
 
   const handleSelectConversation = (id: string) => {
-    selectConversation(id);
+    if (onSelectSession) {
+      onSelectSession(id);
+    } else {
+      selectConversation(id);
+    }
     onClose();
   };
 
@@ -91,7 +129,15 @@ export const ChatSidebar = ({ isOpen, onClose }: ChatSidebarProps) => {
         <ScrollArea className="flex-1 px-4">
           <div className="space-y-2 pb-4">
             <AnimatePresence mode="popLayout">
-              {conversations.length === 0 ? (
+              {isLoadingSessions ? (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-muted-foreground text-sm text-center py-8"
+                >
+                  Loading sessions...
+                </motion.p>
+              ) : displayedSessions.length === 0 ? (
                 <motion.p
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -100,20 +146,20 @@ export const ChatSidebar = ({ isOpen, onClose }: ChatSidebarProps) => {
                   No conversations yet. Start a new chat!
                 </motion.p>
               ) : (
-                conversations.map((conversation) => (
+                displayedSessions.map((conversation) => (
                   <motion.div
                     key={conversation.id}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
                     onClick={() => handleSelectConversation(conversation.id)}
-                    className={`group relative p-3 rounded-lg cursor-pointer transition-all ${conversation.id === currentConversationId
+                    className={`group relative p-3 rounded-lg cursor-pointer transition-all ${conversation.id === selectedSessionId
                       ? 'bg-fire/20 border border-fire/30'
                       : 'bg-muted/30 hover:bg-muted/50 border border-transparent'
                       }`}
                   >
                     <div className="flex items-start gap-3">
-                      <MessageSquare className={`w-4 h-4 mt-0.5 flex-shrink-0 ${conversation.id === currentConversationId
+                      <MessageSquare className={`w-4 h-4 mt-0.5 flex-shrink-0 ${conversation.id === selectedSessionId
                         ? 'text-fire'
                         : 'text-muted-foreground'
                         }`} />
@@ -121,18 +167,22 @@ export const ChatSidebar = ({ isOpen, onClose }: ChatSidebarProps) => {
                         <p className="text-sm font-medium text-foreground truncate">
                           {conversation.title}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {conversation.messages.length} messages
+                        <p className="text-xs text-muted-foreground mt-1 truncate">
+                          {typeof conversation.messageCount === 'number'
+                            ? `${conversation.messageCount} messages`
+                            : conversation.preview || 'No messages yet'}
                         </p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => handleDeleteConversation(e, conversation.id)}
-                        className="opacity-0 group-hover:opacity-100 h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
+                      {!sessions && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => handleDeleteConversation(e, conversation.id)}
+                          className="opacity-0 group-hover:opacity-100 h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      )}
                     </div>
                   </motion.div>
                 ))

@@ -62,7 +62,7 @@ interface AuthState {
   isLoggedIn: boolean;
 
   loginWithPassword: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string) => Promise<{ pendingVerification: boolean }>;
 
   // Real backend session auth
   refreshSession: () => Promise<boolean>;
@@ -113,7 +113,7 @@ export const useAuthStore = create<AuthState>()(
         return false;
       },
 
-      register: async (email: string, password: string) => {
+      register: async (email: string, password: string): Promise<{ pendingVerification: boolean }> => {
         // Use backend auth endpoint to get session cookie
         const registerUrl = `${config.apiBaseUrl}/api/auth/register`;
 
@@ -129,8 +129,10 @@ export const useAuthStore = create<AuthState>()(
           throw new Error(errorData.detail || 'Registration failed');
         }
 
-        // Registration successful - user should check email for confirmation
-        // Don't set login state until they confirm email
+        const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+        // 202 = email confirmation required; 200/201 = immediately active (email confirm disabled)
+        const pendingVerification = response.status === 202 || data.pending_verification === true;
+        return { pendingVerification };
       },
 
       loginWithPassword: async (email: string, password: string) => {

@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "roboto-sai-cli"
+version = "0.1.0"
+description = "Official Roboto SAI CLI tool for quantum analytics and autonomous development"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    {name = "Roberto Villarreal Martinez", email = "roboto@roboto-sai.com"},
+]
+maintainers = [
+    {name = "Roberto Villarreal Martinez", email = "roboto@roboto-sai.com"},
+]
+keywords = ["cli", "quantum", "ai", "robotics", "sigil-929"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "typer[all]>=0.12.0",
+    "rich>=13.7.0",
+    "pydantic>=2.5.0",
+    "structlog>=23.2.0",
+    "qiskit>=1.0.0",
+    "asyncio-mqtt>=0.16.0",  # For advanced cases
+    "httpx>=0.26.0",
+    "cryptography>=42.0.0",
+]
+
+[project.scripts]
+roboto-sai = "roboto_sai_cli.cli:app"
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.3.0",
+    "mypy>=1.8.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pre-commit>=3.6.0",
+]
+quantum = [
+    "qiskit-ibm-provider>=0.8.0",  # For real IBMQ access
+    "qiskit-aer>=0.13.0",  # For local simulation
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+disallow_any_generics = true
+disallow_untyped_defs = true

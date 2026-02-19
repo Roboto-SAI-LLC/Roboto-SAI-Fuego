@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  roboto-sai-cli:
+    build: .
+    container_name: roboto-sai-cli
+    volumes:
+      - .:/app
+      - /app/__pycache__
+    environment:
+      - ROBOTO_QUANTUM_MOCK=true
+      - SIGIL=929
+    command: roboto-sai status

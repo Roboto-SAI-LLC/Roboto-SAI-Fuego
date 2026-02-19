@@ -48,6 +48,7 @@ type SessionListItem = {
   id: string;
   title: string;
   preview: string;
+  summary_preview?: string;
   last_message_at?: string;
   message_count?: number;
   topics?: string[];
@@ -139,8 +140,13 @@ const normalizeSessions = (data: unknown): SessionListItem[] => {
       const preview = toStringValue(item.preview)
         || toStringValue(item.last_message)
         || toStringValue(item.last_message_preview)
+        || toStringValue(item.summary_preview)
         || 'No messages yet';
+      const summaryPreview = toStringValue(item.summary_preview)
+        || toStringValue(item.summaryPreview)
+        || '';
       const lastMessageAt = toStringValue(item.last_message_at)
+        || toStringValue(item.last_message_time)
         || toStringValue(item.updated_at)
         || toStringValue(item.lastMessageAt);
       const messageCount = typeof item.message_count === 'number'
@@ -158,6 +164,7 @@ const normalizeSessions = (data: unknown): SessionListItem[] => {
         id,
         title,
         preview,
+        summary_preview: summaryPreview || undefined,
         last_message_at: lastMessageAt || undefined,
         message_count: messageCount,
         topics,
@@ -195,7 +202,11 @@ const normalizeHistory = (data: unknown): HistoryPage => {
 };
 
 const normalizeSummary = (data: unknown): SummaryData => {
-  const payload = isRecord(data) && isRecord(data.summary) ? data.summary : data;
+  const payload = isRecord(data) && isRecord(data.rollup)
+    ? data.rollup
+    : isRecord(data) && isRecord(data.summary)
+      ? data.summary
+      : data;
   const summary = isRecord(payload) ? toStringValue(payload.summary)
     || toStringValue(payload.rollup)
     || toStringValue(payload.text)
@@ -726,8 +737,16 @@ const Legacy = () => {
       params.set('limit', String(HISTORY_PAGE_SIZE));
       if (pageParam) params.set('cursor', String(pageParam));
       if (activeSessionId) params.set('session_id', activeSessionId);
-      const data = await apiFetch(`/api/chat/history?${params}`);
-      return normalizeHistory(data);
+      try {
+        const data = await apiFetch(`/api/chat/history?${params}`);
+        return normalizeHistory(data);
+      } catch (error) {
+        if (error instanceof Error && /404/.test(error.message)) {
+          const fallbackData = await apiFetch(`/api/chat/history/paginated?${params}`);
+          return normalizeHistory(fallbackData);
+        }
+        throw error;
+      }
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
     retry: 2,
@@ -815,9 +834,8 @@ const Legacy = () => {
   const summaryMutation = useMutation({
     mutationFn: async () => {
       if (!activeSessionId) return null;
-      return apiFetch('/api/conversations/summarize', {
+      return apiFetch(`/api/conversations/summarize?session_id=${encodeURIComponent(activeSessionId)}`, {
         method: 'POST',
-        body: JSON.stringify({ session_id: activeSessionId }),
       });
     },
     onSuccess: async () => {
