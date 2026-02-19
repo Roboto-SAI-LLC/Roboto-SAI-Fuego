@@ -9,6 +9,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: true,
+    // Exclude editor/workspace artifacts from test discovery
+    exclude: ['**/.vscode/**', '**/.vscode/tmp/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

@@ -23,4 +23,13 @@ Notes:
  - The Render `frontend` service has `autoDeployTrigger: off` in `render.yaml` to prevent automatic builds.
  - The Dockerfile was updated to perform runtime substitution of `$PORT` via an entrypoint script and to include `user nginx;` in the nginx config so worker processes drop privileges.
 
+**Quick tip — production-safe startup flags:**
+ - **Do not** pass dev-only CLI flags to production startup scripts (example: `uvicorn --reload` is a boolean flag and `--reload=false` will make the process fail). Make reload conditional in your `start.sh` and only enable it for local/dev runs. Minimal example:
+
+```bash
+# in start.sh (pseudo)
+if [ "$DEV" = "true" ]; then EXTRA='--reload'; else EXTRA=''; fi
+exec uvicorn main_modular:app --host 0.0.0.0 --port "$PORT" $EXTRA --log-level info
+```
+
 If you want, I can set up an optional GitHub Action that automatically triggers a manual Render deploy when the `Validate Frontend Build` workflow completes successfully (requires a repo admin to add `RENDER_API_KEY` to secrets).

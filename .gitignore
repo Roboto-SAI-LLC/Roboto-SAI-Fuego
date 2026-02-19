@@ -29,6 +29,7 @@ tsconfig.node.tsbuildinfo
 .vs/*
 .vs\*
 .vs
+.roboto/*
 
 # Backend
 BackendAdds/*
@@ -38,6 +39,11 @@ backend/venv*/
 backend/.mypy_cache/
 backend/.pytest_cache/
 FutureAdds/*
+backend/*
+!backend/*
+backend\*
+
+
 
 # Python bytecode
 __pycache__/
@@ -95,6 +101,10 @@ telegram_token.txt
 # VSCODE
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
+
+# VS Code temporary area
+.vscode/tmp/
 
 Tasks.md
 troubleshoot
@@ -109,3 +119,77 @@ apps/model-training/runs/
 apps/model-training/models/
 apps/model-training/**/outputs/
 apps/model-training/**/lora-*/
+dep-1-logs.json
+dep-1-output.json
+dep-list.json
+dep-1.json
+roboto_memory.json
+
+# Render-specific deployment artifacts
+render-*.yaml
+render-*.yml
+deploy-*.sh
+deploy-*.ps1
+docker-*.log
+docker-startup.log
+build.log
+*.tar.gz
+
+# Additional security for Render env vars (though already covered)
+.env.render
+.env.production
+.env.staging
+render.env
+
+# Database backups (if any local ones exist)
+*.sql
+*.db.backup
+persistent_memory.db.backup
+
+# Logs from local deployment scripts
+*.out
+*.err
+
+# Temporary deployment files
+temp/
+tmp/
+.cache/
+
+# Additional temporary and data files
+build.log
+dep-1-logs.json
+dep-1-output.json
+dep-1.json
+dep-list.json
+docker-build.log
+docker-startup.log
+llama-server.exe
+persistent_memory.db
+roboto_memory.json
+supabase.tar.gz
+test_async_fix.json
+
+# Test scripts and files
+test_*.py
+verify_responses_api.py
+
+# Local scripts
+run_local.ps1
+docker-start.ps1
+docker-start.sh
+deploy.sh
+
+# Model files and executables
+*.gguf
+*.exe
+
+# VS Code temporary area
+.vscode/tmp/
+
+# VS Code remote server installations
+.vscode-server*/
+.vscode-server-insiders/
+
+# QuTiP cache and data directories
+.qutip/
+qutip_coeffs*/

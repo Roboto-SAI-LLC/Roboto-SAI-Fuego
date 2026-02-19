@@ -45,6 +45,7 @@ interface ChatState {
   currentTheme: string;
   voiceMode: boolean;
   agentMode: boolean;
+  codeWrap: boolean;
   userId: string | null;
 
   // Getters
@@ -63,6 +64,7 @@ interface ChatState {
   clearMessages: () => void;
   toggleVoiceMode: () => void;
   toggleAgentMode: () => void;
+  toggleCodeWrap: () => void;
   loadUserHistory: (userId: string) => Promise<void>;
   resetConversations: () => void;
 }
@@ -139,6 +141,7 @@ export const useChatStore = create<ChatState>()(
       currentTheme: 'Regio-Aztec Fire #42',
       voiceMode: false,
       agentMode: false,
+      codeWrap: true,
       userId: null,
       getCurrentConversation: () => {
         const state = get();
@@ -306,6 +309,7 @@ export const useChatStore = create<ChatState>()(
 
       toggleVoiceMode: () => set((state) => ({ voiceMode: !state.voiceMode })),
       toggleAgentMode: () => set((state) => ({ agentMode: !state.agentMode })),
+      toggleCodeWrap: () => set((state) => ({ codeWrap: !state.codeWrap })),
       loadUserHistory: async (userId: string) => {
         try {
           set({ conversations: [], currentConversationId: null, userId });
@@ -428,6 +432,7 @@ export const useChatStore = create<ChatState>()(
         conversations: state.conversations,
         currentConversationId: state.currentConversationId,
         currentTheme: state.currentTheme,
+        codeWrap: state.codeWrap,
         userId: state.userId,
       }),
     }

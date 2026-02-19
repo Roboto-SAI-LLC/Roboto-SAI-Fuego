@@ -1,0 +1,88 @@
+# Roboto SAI 2026 - Fuego Eterno Edition
+# Docker Compose configuration for development and production
+
+services:
+  # Development service
+  roboto-sai-dev:
+    build:
+      context: .
+      target: development
+    container_name: roboto-sai-dev
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount source code for hot reload
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - API_PROXY_TARGET=http://roboto-sai-backend:10000
+    restart: unless-stopped
+    depends_on:
+      - roboto-sai-backend
+    networks:
+      - roboto-network
+    profiles:
+      - dev
+
+  # Production service
+  roboto-sai-prod:
+    build:
+      context: .
+      target: production
+      args:
+        - VITE_API_BASE_URL=http://host.docker.internal:5000
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    container_name: roboto-sai-prod
+    ports:
+      - "8080:10000"
+    environment:
+      - NODE_ENV=production
+      - VITE_API_BASE_URL=http://host.docker.internal:5000
+    restart: unless-stopped
+    depends_on:
+      - roboto-sai-backend
+    networks:
+      - roboto-network
+    profiles:
+      - prod
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Python FastAPI Backend - Roboto SAI 2026
+  roboto-sai-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: roboto-sai-backend
+    ports:
+      - "5000:10000"
+    environment:
+      - PYTHON_ENV=development
+      - ROBO_EMOTION_STATE_PATH=/app/data/emotion_state.json
+      - PORT=10000
+    env_file:
+      - .env
+    volumes:
+      # Mount data directory for persistent storage in development
+      - ./backend/data:/app/data
+    restart: unless-stopped
+    networks:
+      - roboto-network
+    profiles:
+      - prod
+      - dev
+    healthcheck:
+      test: ["CMD", "python", "-c", "from main_modular import app; print('healthy')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  roboto-network:
+    driver: bridge

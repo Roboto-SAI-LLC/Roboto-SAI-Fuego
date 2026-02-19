@@ -58,6 +58,19 @@ PORT=${PORT:-10000}\n\
 \n\
 echo "Starting Roboto SAI Backend on port $PORT"\n\
 \n\
+# In dev mode, optionally verify Grok connectivity early to help debug model/API issues\n\
+if [ "${DEV_VERIFY_GROK:-false}" = "true" ]; then\n\
+  echo "DEV_VERIFY_GROK=true — running /app/verify_grok.py"\n\
+  python /app/verify_grok.py || {\n\
+    if [ "${XAI_VERIFY_FAIL_ON_ERROR:-false}" = "true" ]; then\n\
+      echo "Grok verification failed and XAI_VERIFY_FAIL_ON_ERROR=true — aborting startup"\n\
+      exit 1\n\
+    else\n\
+      echo "Grok verification failed — continuing (set XAI_VERIFY_FAIL_ON_ERROR=true to fail startup)"\n\
+    fi\n\
+  }\n\
+fi\n\
+\
 # Start uvicorn with proper configuration\n\
 exec uvicorn main_modular:app \\\n\
     --host 0.0.0.0 \\\n\
@@ -83,4 +96,4 @@ USER roboto
 EXPOSE 10000
 
 # Use the startup script
-CMD ["/app/start.sh"]
+CMD ["uvicorn", "main_modular:app", "--host", "0.0.0.0", "--port", "10000"]

@@ -5,6 +5,7 @@ Adapts Roboto SAI SDK to LangChain's LLM interface.
 
 import asyncio
 import os
+import json
 from typing import Any, List, Optional, Dict
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import LLM
@@ -262,23 +263,34 @@ class GrokLLM(LLM):
         
         try:
             logger.info(f"Calling Grok API: {url}")
+
+            # Optional: dump request payload for local debugging (controlled by env)
+            if os.getenv("LOG_XAI_PAYLOADS", "false").lower() in ("1", "true", "yes"):
+                try:
+                    masked = dict(payload)
+                    if isinstance(masked.get("model"), str):
+                        masked["model"] = masked["model"]
+                    logger.debug("Grok request payload (masked): %s", json.dumps(masked))
+                except Exception:
+                    logger.debug("Grok request payload (could not serialize)")
+
             # Increased timeout to 120s to handle slow responses or cold starts
             with httpx.Client(timeout=120.0) as client:
                 response = client.post(url, json=payload, headers=headers)
-                
+
                 # Log response for debugging
                 logger.info(f"Grok API response status: {response.status_code}")
-                
+
                 if response.status_code == 404:
                     # Try alternate endpoint structure
                     logger.warning("404 on standard endpoint, trying alternate...")
                     return self._try_alternate_grok_endpoint(user_message, roboto_context, api_key)
-                
+
                 response.raise_for_status()
-                
+
                 data = response.json()
                 logger.debug(f"Grok API response: {data}")
-                
+
                 # Extract content from response
                 content = self._extract_response_text(data)
                 if content:
@@ -287,18 +299,35 @@ class GrokLLM(LLM):
                         "response": content,
                         "response_id": data.get("id"),
                     }
-                
+
                 return {"success": False, "error": "Empty response from Grok API"}
                     
         except httpx.HTTPStatusError as e:
+            # Try to extract structured error details
             error_detail = ""
             try:
                 error_detail = e.response.json()
-            except:  # noqa: E722
+            except Exception:
                 error_detail = e.response.text
 
-            # Log full details server-side, but return a generic message to the client
             logger.error(f"Grok API HTTP error {e.response.status_code}: {error_detail}", exc_info=True)
+
+            # If the API reports a missing/unknown model, attempt sensible fallbacks
+            detail_text = json.dumps(error_detail) if isinstance(error_detail, dict) else str(error_detail)
+            if "model not found" in detail_text.lower() or "model_not_found" in detail_text.lower() or "unknown model" in detail_text.lower():
+                logger.warning("Configured Grok model not found — attempting fallback models")
+                fallback_result = self._try_model_alternatives(user_message, roboto_context, previous_response_id, api_key, url)
+                if fallback_result.get("success"):
+                    return fallback_result
+
+                # If fallbacks failed, return a clear error so operator can fix XAI_MODEL
+                tried = ", ".join(self._fallback_models())
+                return {
+                    "success": False,
+                    "error": f"Configured Grok model not found. Tried: {tried}. Update XAI_MODEL or GROK_MODEL environment variable.",
+                }
+
+            # Generic HTTP error response
             return {
                 "success": False,
                 "error": "Grok service returned an error. Please try again later.",
@@ -398,6 +427,57 @@ class GrokLLM(LLM):
         if openai_key:
             logger.warning("Grok API unavailable, attempting OpenAI fallback")
             return self._try_openai_fallback(user_message, roboto_context, openai_key)
+
+
+    def _fallback_models(self) -> list[str]:
+        """Return candidate Grok model names to try (env first, then sensible defaults)."""
+        candidates = []
+        for m in (os.getenv("XAI_MODEL"), os.getenv("GROK_MODEL"), "grok-4-latest", "grok-4-1-fast-reasoning", "grok-1"):
+            if m and m not in candidates:
+                candidates.append(m)
+        return candidates
+
+
+    def _try_model_alternatives(
+        self,
+        user_message: str,
+        roboto_context: Optional[str],
+        previous_response_id: Optional[str],
+        api_key: str,
+        original_url: str,
+    ) -> Dict[str, Any]:
+        """When Grok reports an unknown model, try a short list of alternative model names."""
+        import httpx
+
+        tried = []
+        for model in self._fallback_models():
+            if not model:
+                continue
+            if model in tried:
+                continue
+            tried.append(model)
+            try:
+                payload = {
+                    "model": model,
+                    "messages": self._build_xai_messages(user_message, roboto_context),
+                    "temperature": 0.7,
+                }
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                logger.info(f"Trying Grok model fallback: {model} on {original_url}")
+                with httpx.Client(timeout=30.0) as client:
+                    resp = client.post(original_url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        content = self._extract_response_text(data)
+                        if content:
+                            logger.info(f"Grok model fallback succeeded with model={model}")
+                            return {"success": True, "response": content, "response_id": data.get("id")}
+            except Exception as e:
+                logger.debug(f"Grok fallback model {model} failed: {e}")
+                continue
+
+        logger.warning(f"All Grok model fallbacks failed (tried: {tried})")
+        return {"success": False, "error": "All Grok model fallbacks failed."}
 
         return {
             "success": False, 

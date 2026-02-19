@@ -3,6 +3,9 @@ Authentication API for Roboto SAI
 Integrates with Supabase Auth for user management
 """
 
+import os
+import logging
+import requests
 from fastapi import APIRouter, HTTPException, Request, Response, Depends
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel, EmailStr
@@ -27,6 +30,9 @@ class RegisterRequest(BaseModel):
 
 class MagicLinkRequest(BaseModel):
     email: EmailStr
+
+class UpdateUserRequest(BaseModel):
+    display_name: Optional[str] = None
 
 class UserResponse(BaseModel):
     id: str
@@ -206,3 +212,89 @@ async def logout(
     except Exception as e:
         logger.error(f"Logout failed: {e}")
         return AuthResponse(success=False, message="Logout failed")
+
+@router.patch("/update", response_model=AuthResponse)
+async def update_user(
+    update_data: UpdateUserRequest,
+    request: Request,
+    supabase: AsyncClient = Depends(get_supabase_client)
+):
+    """Update current user profile information"""
+    try:
+        # Accept token from Authorization header or access_token cookie
+        auth_header = request.headers.get("authorization")
+        token = None
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.replace("Bearer ", "")
+        else:
+            token = request.cookies.get("access_token")
+
+        if not token:
+            raise HTTPException(status_code=401, detail="No auth token provided")
+
+        # Get Supabase URL and anon key for direct API call
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
+
+        if not supabase_url or not supabase_anon_key:
+            raise HTTPException(status_code=500, detail="Supabase configuration missing")
+
+        # Prepare update data with validation
+        body = {}
+        if update_data.display_name is not None:
+            display_name = update_data.display_name.strip()
+            if not display_name:
+                raise HTTPException(status_code=400, detail="display_name must be a non-empty string")
+
+            # Additional backend validation
+            if len(display_name) < 2:
+                raise HTTPException(status_code=400, detail="Username must be at least 2 characters long")
+            if len(display_name) > 20:
+                raise HTTPException(status_code=400, detail="Username cannot exceed 20 characters")
+            if not display_name.replace('_', '').replace('-', '').isalnum():
+                raise HTTPException(status_code=400, detail="Username can only contain letters, numbers, underscores, and hyphens")
+
+            body["data"] = {"display_name": display_name}
+
+        if not body:
+            raise HTTPException(status_code=400, detail="No valid update fields provided")
+
+        # Use Supabase REST API to update user metadata
+        update_url = f"{supabase_url}/auth/v1/user"
+        headers = {
+            "apikey": supabase_anon_key,
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+        response = requests.put(update_url, json=body, headers=headers)
+
+        if response.status_code != 200:
+            logger.error(f"Supabase update response: {response.status_code} - {response.text}")
+            raise HTTPException(status_code=400, detail=f"Supabase update failed: {response.text}")
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"Supabase update failed: {response.text}")
+
+        # Get updated user info
+        user_response = await supabase.auth.get_user(token)
+
+        if not user_response.user:
+            raise HTTPException(status_code=400, detail="Failed to fetch updated user")
+
+        user = user_response.user
+        user_data = UserResponse(
+            id=user.id,
+            email=user.email,
+            display_name=user.user_metadata.get('display_name') if user.user_metadata else None,
+            avatar_url=user.user_metadata.get('avatar_url') if user.user_metadata else None,
+            provider=user.app_metadata.get('provider', 'supabase') if user.app_metadata else 'supabase'
+        )
+
+        return AuthResponse(success=True, user=user_data, message="Profile updated successfully")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Update failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")
