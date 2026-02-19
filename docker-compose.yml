@@ -11,7 +11,8 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      # Mount source code for hot reload
+      # Mount source code for hot reload (exclude node_modules)
+      - .:/app:cached
       - /app/node_modules
     environment:
       - NODE_ENV=development

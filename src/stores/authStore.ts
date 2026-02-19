@@ -68,6 +68,7 @@ interface AuthState {
   refreshSession: () => Promise<boolean>;
   requestMagicLink: (email: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateUsername: (newUsername: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -193,6 +194,45 @@ export const useAuthStore = create<AuthState>()(
 
         // Clear local state regardless of backend response
         set({ userId: null, username: null, email: null, avatarUrl: null, provider: null, isLoggedIn: false });
+      },
+
+      updateUsername: async (newUsername: string) => {
+        // Validate username on frontend
+        if (!newUsername || newUsername.trim().length === 0) {
+          throw new Error('Username cannot be empty');
+        }
+
+        const trimmedUsername = newUsername.trim();
+
+        if (trimmedUsername.length < 2) {
+          throw new Error('Username must be at least 2 characters long');
+        }
+
+        if (trimmedUsername.length > 20) {
+          throw new Error('Username cannot exceed 20 characters');
+        }
+
+        if (!/^[a-zA-Z0-9_-\s]+$/.test(trimmedUsername)) {
+          throw new Error('Display name can only contain letters, numbers, underscores, hyphens, and spaces');
+        }
+
+        // Use backend auth endpoint to update username
+        const updateUrl = `${config.apiBaseUrl}/api/auth/update`;
+
+        const response = await fetch(updateUrl, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ display_name: trimmedUsername }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ detail: 'Update failed' }));
+          throw new Error(errorData.detail || 'Update failed');
+        }
+
+        // Update local state
+        set({ username: trimmedUsername });
       },
     }),
     {

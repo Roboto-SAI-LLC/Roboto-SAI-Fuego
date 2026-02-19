@@ -5,15 +5,34 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
 import { UpgradeButton } from "@/components/UpgradeButton";
 
 const Settings = () => {
     const logout = useAuthStore((state) => state.logout);
-    const email = useAuthStore((state) => state.email);
     const username = useAuthStore((state) => state.username);
-    const { currentTheme, setTheme } = useChatStore();
+    const email = useAuthStore((state) => state.email);
+    const updateUsername = useAuthStore((state) => state.updateUsername);
+    const { currentTheme, setTheme, codeWrap, toggleCodeWrap } = useChatStore();
+
+    const [newUsername, setNewUsername] = useState(username || '');
+    const [savingUsername, setSavingUsername] = useState(false);
+
+    const handleSaveUsername = async () => {
+        if (!newUsername.trim() || newUsername === username) return;
+        setSavingUsername(true);
+        try {
+            await updateUsername(newUsername.trim());
+        } catch (error) {
+            console.error('Failed to update username:', error);
+            // Reset on error
+            setNewUsername(username || '');
+        } finally {
+            setSavingUsername(false);
+        }
+    };
 
     // Note: subscription_status would need to be added to AuthState if premium is tracked
     const isPremium = false;
@@ -45,9 +64,21 @@ const Settings = () => {
                                     <Input value={email || ''} readOnly className="bg-muted" />
                                 </div>
                                 <div className="space-y-1">
-                                    <Label>Username</Label>
-                                    <Input value={username || ''} readOnly className="bg-muted" />
-                                    <p className="text-xs text-muted-foreground">Username changes currently disabled.</p>
+                                    <Label>Display Name</Label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            value={newUsername}
+                                            onChange={(e) => setNewUsername(e.target.value)}
+                                            placeholder="Enter display name"
+                                        />
+                                        <Button
+                                            onClick={handleSaveUsername}
+                                            disabled={savingUsername || newUsername === username || !newUsername.trim()}
+                                            variant="outline"
+                                        >
+                                            {savingUsername ? 'Saving...' : 'Save'}
+                                        </Button>
+                                    </div>
                                 </div>
                                 <div className="pt-4">
                                     <Button variant="destructive" onClick={logout}>Sign Out</Button>
@@ -64,22 +95,39 @@ const Settings = () => {
                                 <CardDescription>Customize the Roboto SAI interface.</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="grid grid-cols-2 gap-4">
-                                    {['Regio-Aztec Fire #42', 'Cyber-Mictlan', 'Neon-Tenochtitlan', 'Obsidian-Void'].map(theme => (
-                                        <div
-                                            key={theme}
-                                            onClick={() => setTheme(theme)}
-                                            className={`
-                                                cursor-pointer p-4 rounded-lg border-2 transition-all
-                                                ${currentTheme === theme ? 'border-primary bg-primary/10' : 'border-muted hover:border-primary/50'}
-                                            `}
-                                        >
-                                            <div className="font-medium">{theme}</div>
-                                            <div className="text-xs text-muted-foreground">
-                                                {currentTheme === theme ? 'Active' : 'Click to apply'}
-                                            </div>
+                                <div className="space-y-6">
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {['Regio-Aztec Fire #42', 'Cyber-Mictlan', 'Neon-Tenochtitlan', 'Obsidian-Void'].map(theme => (
+                                                <div
+                                                    key={theme}
+                                                    onClick={() => setTheme(theme)}
+                                                    className={`
+                                                        cursor-pointer p-4 rounded-lg border-2 transition-all
+                                                        ${currentTheme === theme ? 'border-primary bg-primary/10' : 'border-muted hover:border-primary/50'}
+                                                    `}
+                                                >
+                                                    <div className="font-medium">{theme}</div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {currentTheme === theme ? 'Active' : 'Click to apply'}
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
+                                    </div>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <Label htmlFor="code-wrap">Enable Code Wrap in Chat</Label>
+                                                <p className="text-xs text-muted-foreground">Automatically wrap long code blocks for better readability</p>
+                                            </div>
+                                            <Switch
+                                                id="code-wrap"
+                                                checked={codeWrap}
+                                                onCheckedChange={toggleCodeWrap}
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>

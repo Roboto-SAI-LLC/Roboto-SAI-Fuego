@@ -3,7 +3,7 @@
 ## Overview
 This document describes the production-ready API endpoints for conversation management, including enhanced history retrieval, session management, and automatic summarization.
 
-**Base URL:** `http://localhost:8080` (development) | `https://your-domain.com` (production)
+**Base URL:** `http://localhost:8080` (development) | `https://roboto-sai.com` (production)
 
 **Authentication:** All endpoints require authentication via session cookie (`roboto_session`) or JWT token.
 
